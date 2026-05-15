@@ -36,7 +36,7 @@ uses
 const
   CNumericSource =
   '''
-  module jit numops;
+  module mem numops;
 
   // Test integer div, mod, xor, shl, shr
   public routine intops(x: int32): int32;
@@ -116,22 +116,22 @@ begin
       Check(True, 'Compiled successfully (opt %d)', [LOrd]);
 
       // intops(10): div=3, mod=1, xor=15, shl=20, shr=2 → 41
-      LIntResult := LScript.Invoke('intops', [10], vtInt64).AsInt64;
+      LIntResult := LScript.Invoke('intops', [10], gvtInt64).AsInt64;
       Check(LIntResult = 41,
         'intops(10) = %d (expected 41, opt %d)', [LIntResult, LOrd]);
 
       // floatconst(): 10.5 + 3.0*2.0 - 1.5 = 15.0
-      LFloatResult := LScript.Invoke('floatconst', [], vtFloat64).AsFloat64;
+      LFloatResult := LScript.Invoke('floatconst', [], gvtFloat64).AsFloat64;
       Check(SameValue(LFloatResult, 15.0, 0.001),
         'floatconst() = %.4f (expected 15.0, opt %d)', [LFloatResult, LOrd]);
 
       // mixed(5): 5 * 2.5 + 1.0 = 13.5
-      LFloatResult := LScript.Invoke('mixed', [5], vtFloat64).AsFloat64;
+      LFloatResult := LScript.Invoke('mixed', [5], gvtFloat64).AsFloat64;
       Check(SameValue(LFloatResult, 13.5, 0.001),
         'mixed(5) = %.4f (expected 13.5, opt %d)', [LFloatResult, LOrd]);
 
       // slashdiv(7, 2): 7 / 2 = 3.5
-      LFloatResult := LScript.Invoke('slashdiv', [7, 2], vtFloat64).AsFloat64;
+      LFloatResult := LScript.Invoke('slashdiv', [7, 2], gvtFloat64).AsFloat64;
       Check(SameValue(LFloatResult, 3.5, 0.001),
         'slashdiv(7,2) = %.4f (expected 3.5, opt %d)', [LFloatResult, LOrd]);
     finally

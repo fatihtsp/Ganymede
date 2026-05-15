@@ -35,7 +35,7 @@ uses
 const
   CStringIOSource =
   '''
-  module jit stringio;
+  module mem stringio;
 
   // Test write/writeln with printf-style format strings
   public routine testPrint();
@@ -171,18 +171,18 @@ begin
       Check(True, 'testPrint ran without crash (opt %d)', [LOrd]);
 
       // Test boolean logic (returns boolean — 1=true, 0=false as int8)
-      LResult := LScript.Invoke('testBool', [10, 5], vtInt64).AsInt64;
+      LResult := LScript.Invoke('testBool', [10, 5], gvtInt64).AsInt64;
       Check(LResult = 1, 'testBool(10,5) = %d (expected true, opt %d)', [LResult, LOrd]);
 
-      LResult := LScript.Invoke('testBool', [3, 7], vtInt64).AsInt64;
+      LResult := LScript.Invoke('testBool', [3, 7], gvtInt64).AsInt64;
       Check(LResult = 0, 'testBool(3,7) = %d (expected false, opt %d)', [LResult, LOrd]);
 
-      LResult := LScript.Invoke('testBool', [5, 5], vtInt64).AsInt64;
+      LResult := LScript.Invoke('testBool', [5, 5], gvtInt64).AsInt64;
       Check(LResult = 0, 'testBool(5,5) = %d (expected false, opt %d)', [LResult, LOrd]);
 
       // Test managed strings: concat, sharing, reassignment, comparison, +=
       TGnyUtils.PrintLn('--- String output (opt %d) ---', [LOrd]);
-      LResult := LScript.Invoke('testStrings', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('testStrings', [], gvtInt64).AsInt64;
       TGnyUtils.PrintLn('--- End string output ---', []);
 
       // Report heap leaks while backend is still alive

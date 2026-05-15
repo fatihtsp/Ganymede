@@ -28,7 +28,7 @@ uses
   Ganymede.Debug.SourceMap;
 
 type
-  TGnyValueType = Ganymede.Types.TValueType;
+  TGnyValueType = Ganymede.Types.TGnyValueType;
 
   TGnySubsystem = Ganymede.Types.TSubsystem;
 
@@ -68,33 +68,33 @@ const
 
   //--- Value Types ------------------------------------------------------------
 
-  vtVoid    = Ganymede.Types.TValueType.vtVoid;
-  vtInt8    = Ganymede.Types.TValueType.vtInt8;
-  vtInt16   = Ganymede.Types.TValueType.vtInt16;
-  vtInt32   = Ganymede.Types.TValueType.vtInt32;
-  vtInt64   = Ganymede.Types.TValueType.vtInt64;
-  vtUInt8   = Ganymede.Types.TValueType.vtUInt8;
-  vtUInt16  = Ganymede.Types.TValueType.vtUInt16;
-  vtUInt32  = Ganymede.Types.TValueType.vtUInt32;
-  vtUInt64  = Ganymede.Types.TValueType.vtUInt64;
-  vtFloat32 = Ganymede.Types.TValueType.vtFloat32;
-  vtFloat64 = Ganymede.Types.TValueType.vtFloat64;
-  vtPointer = Ganymede.Types.TValueType.vtPointer;
+  gvtVoid    = Ganymede.Types.TGnyValueType.gvtVoid;
+  gvtInt8    = Ganymede.Types.TGnyValueType.gvtInt8;
+  gvtInt16   = Ganymede.Types.TGnyValueType.gvtInt16;
+  gvtInt32   = Ganymede.Types.TGnyValueType.gvtInt32;
+  gvtInt64   = Ganymede.Types.TGnyValueType.gvtInt64;
+  gvtUInt8   = Ganymede.Types.TGnyValueType.gvtUInt8;
+  gvtUInt16  = Ganymede.Types.TGnyValueType.gvtUInt16;
+  gvtUInt32  = Ganymede.Types.TGnyValueType.gvtUInt32;
+  gvtUInt64  = Ganymede.Types.TGnyValueType.gvtUInt64;
+  gvtFloat32 = Ganymede.Types.TGnyValueType.gvtFloat32;
+  gvtFloat64 = Ganymede.Types.TGnyValueType.gvtFloat64;
+  gvtPointer = Ganymede.Types.TGnyValueType.gvtPointer;
 
   //--- Type Shorthand Constants -----------------------------------------------
 
-  tVoid = vtVoid;
-  tI8   = vtInt8;
-  tI16  = vtInt16;
-  tI32  = vtInt32;
-  tI64  = vtInt64;
-  tU8   = vtUInt8;
-  tU16  = vtUInt16;
-  tU32  = vtUInt32;
-  tU64  = vtUInt64;
-  tF32  = vtFloat32;
-  tF64  = vtFloat64;
-  tPtr  = vtPointer;
+  tVoid = gvtVoid;
+  tI8   = gvtInt8;
+  tI16  = gvtInt16;
+  tI32  = gvtInt32;
+  tI64  = gvtInt64;
+  tU8   = gvtUInt8;
+  tU16  = gvtUInt16;
+  tU32  = gvtUInt32;
+  tU64  = gvtUInt64;
+  tF32  = gvtFloat32;
+  tF64  = gvtFloat64;
+  tPtr  = gvtPointer;
 
   //--- Subsystem --------------------------------------------------------------
 
@@ -225,7 +225,7 @@ type
       const ADllName: string;
       const AFuncName: string;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = vtVoid;
+      const AReturn: TGnyValueType = gvtVoid;
       const AVarArgs: Boolean = False;
       const ALinkage: TGnyLinkage = plC
     ): TGnyNativeBackend;
@@ -234,7 +234,7 @@ type
       const ALibName: string;
       const AFuncName: string;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = vtVoid;
+      const AReturn: TGnyValueType = gvtVoid;
       const AVarArgs: Boolean = False;
       const ALinkage: TGnyLinkage = plC
     ): TGnyNativeBackend;
@@ -243,7 +243,7 @@ type
       const AFuncName: string;
       const AHostAddr: Pointer;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = vtVoid
+      const AReturn: TGnyValueType = gvtVoid
     ): TGnyNativeBackend;
 
     function GetImportParamTypes(const AFuncName: string): TArray<TGnyValueType>;
@@ -330,18 +330,18 @@ type
     // Function Definition
     //==========================================================================
     function Func(const AName: string;
-      const AReturnType: TGnyValueType = vtVoid;
+      const AReturnType: TGnyValueType = gvtVoid;
       const AIsEntryPoint: Boolean = False;
       const ALinkage: TGnyLinkage = plDefault;
       const AIsPublic: Boolean = False): TGnyNativeBackend;
 
     function OverloadFunc(const AName: string;
-      const AReturnType: TGnyValueType = vtVoid;
+      const AReturnType: TGnyValueType = gvtVoid;
       const AIsEntryPoint: Boolean = False;
       const AIsPublic: Boolean = False): TGnyNativeBackend;
 
     function VariadicFunc(const AName: string;
-      const AReturnType: TGnyValueType = vtVoid;
+      const AReturnType: TGnyValueType = gvtVoid;
       const AIsEntryPoint: Boolean = False;
       const AIsPublic: Boolean = False): TGnyNativeBackend;
 

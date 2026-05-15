@@ -110,19 +110,19 @@ type
   );
 
   { TValueType }
-  TValueType = (
-    vtVoid,
-    vtInt8,
-    vtInt16,
-    vtInt32,
-    vtInt64,
-    vtUInt8,
-    vtUInt16,
-    vtUInt32,
-    vtUInt64,
-    vtFloat32,
-    vtFloat64,
-    vtPointer
+  TGnyValueType = (
+    gvtVoid,
+    gvtInt8,
+    gvtInt16,
+    gvtInt32,
+    gvtInt64,
+    gvtUInt8,
+    gvtUInt16,
+    gvtUInt32,
+    gvtUInt64,
+    gvtFloat32,
+    gvtFloat64,
+    gvtPointer
   );
 
   { TOptimizeLevel }
@@ -365,7 +365,7 @@ type
   { TOperand }
   TOperand = record
     Kind: TOperandKind;
-    ValueType: TValueType;
+    ValueType: TGnyValueType;
     ImmInt: Int64;
     ImmFloat: Double;
     DataHandle: TDataHandle;
@@ -405,7 +405,7 @@ type
   TDataEntry = record
     Offset: Cardinal;
     Size: Cardinal;
-    DataType: TValueType;
+    DataType: TGnyValueType;
   end;
 
   { TImportEntry }
@@ -413,10 +413,10 @@ type
     DllName: string;
     FuncName: string;
     IATOffset: Cardinal;
-    ReturnType: TValueType;
+    ReturnType: TGnyValueType;
     IsStatic: Boolean;
     Linkage: TLinkage;
-    ParamTypes: TArray<TValueType>;
+    ParamTypes: TArray<TGnyValueType>;
     HostAddr: Pointer;           // non-nil = host function, skip DLL resolution
   end;
 
@@ -430,7 +430,7 @@ type
   { TParamInfo }
   TParamInfo = record
     ParamName: string;
-    ParamType: TValueType;
+    ParamType: TGnyValueType;
     ParamSize: Integer;
     ParamAlignment: Integer;
     IsByRef: Boolean;
@@ -439,7 +439,7 @@ type
   { TLocalInfo }
   TLocalInfo = record
     LocalName: string;
-    LocalType: TValueType;
+    LocalType: TGnyValueType;
     LocalSize: Integer;
     LocalAlignment: Integer;
     StackOffset: Integer;
@@ -486,7 +486,7 @@ type
     IsPublic: Boolean;
     Linkage: TLinkage;
     ExportName: string;
-    ReturnType: TValueType;
+    ReturnType: TGnyValueType;
     ReturnSize: Integer;
     ReturnAlignment: Integer;
     Params: TArray<TParamInfo>;
@@ -502,18 +502,18 @@ type
 // TYPE SHORTHAND CONSTANTS
 //============================================================================
 const
-  tVoid = TValueType.vtVoid;
-  tI8   = TValueType.vtInt8;
-  tI16  = TValueType.vtInt16;
-  tI32  = TValueType.vtInt32;
-  tI64  = TValueType.vtInt64;
-  tU8   = TValueType.vtUInt8;
-  tU16  = TValueType.vtUInt16;
-  tU32  = TValueType.vtUInt32;
-  tU64  = TValueType.vtUInt64;
-  tF32  = TValueType.vtFloat32;
-  tF64  = TValueType.vtFloat64;
-  tPtr  = TValueType.vtPointer;
+  tVoid = TGnyValueType.gvtVoid;
+  tI8   = TGnyValueType.gvtInt8;
+  tI16  = TGnyValueType.gvtInt16;
+  tI32  = TGnyValueType.gvtInt32;
+  tI64  = TGnyValueType.gvtInt64;
+  tU8   = TGnyValueType.gvtUInt8;
+  tU16  = TGnyValueType.gvtUInt16;
+  tU32  = TGnyValueType.gvtUInt32;
+  tU64  = TGnyValueType.gvtUInt64;
+  tF32  = TGnyValueType.gvtFloat32;
+  tF64  = TGnyValueType.gvtFloat64;
+  tPtr  = TGnyValueType.gvtPointer;
 
 //============================================================================
 // THREAD-LOCAL EXPRESSION CONTEXT
@@ -835,7 +835,7 @@ class function TOperand.FromImm(const AValue: Int64): TOperand;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Kind := okImmediate;
-  Result.ValueType := vtInt64;
+  Result.ValueType := gvtInt64;
   Result.ImmInt := AValue;
 end;
 
@@ -843,7 +843,7 @@ class function TOperand.FromImm(const AValue: Double): TOperand;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Kind := okImmediate;
-  Result.ValueType := vtFloat64;
+  Result.ValueType := gvtFloat64;
   Result.ImmFloat := AValue;
 end;
 
@@ -851,7 +851,7 @@ class function TOperand.FromData(const AHandle: TDataHandle): TOperand;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Kind := okData;
-  Result.ValueType := vtPointer;
+  Result.ValueType := gvtPointer;
   Result.DataHandle := AHandle;
 end;
 
@@ -859,7 +859,7 @@ class function TOperand.FromGlobal(const AHandle: TDataHandle): TOperand;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Kind := okGlobal;
-  Result.ValueType := vtPointer;
+  Result.ValueType := gvtPointer;
   Result.DataHandle := AHandle;
 end;
 
@@ -867,7 +867,7 @@ class function TOperand.FromImport(const AHandle: TImportHandle): TOperand;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Kind := okImport;
-  Result.ValueType := vtPointer;
+  Result.ValueType := gvtPointer;
   Result.ImportHandle := AHandle;
 end;
 
@@ -889,14 +889,14 @@ class function TOperand.FromFunc(const AHandle: TFuncHandle): TOperand;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Kind := okFunc;
-  Result.ValueType := vtPointer;
+  Result.ValueType := gvtPointer;
   Result.FuncHandle := AHandle;
 end;
 
 class operator TOperand.Implicit(const AValue: Integer): TOperand;
 begin
   Result := FromImm(Int64(AValue));
-  Result.ValueType := vtInt32;
+  Result.ValueType := gvtInt32;
 end;
 
 class operator TOperand.Implicit(const AValue: Int64): TOperand;
@@ -907,19 +907,19 @@ end;
 class operator TOperand.Implicit(const AValue: Cardinal): TOperand;
 begin
   Result := FromImm(Int64(AValue));
-  Result.ValueType := vtUInt32;
+  Result.ValueType := gvtUInt32;
 end;
 
 class operator TOperand.Implicit(const AValue: UInt64): TOperand;
 begin
   Result := FromImm(Int64(AValue));
-  Result.ValueType := vtUInt64;
+  Result.ValueType := gvtUInt64;
 end;
 
 class operator TOperand.Implicit(const AValue: Single): TOperand;
 begin
   Result := FromImm(Double(AValue));
-  Result.ValueType := vtFloat32;
+  Result.ValueType := gvtFloat32;
 end;
 
 class operator TOperand.Implicit(const AValue: Double): TOperand;

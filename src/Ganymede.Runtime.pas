@@ -84,7 +84,7 @@ begin
   //----------------------------------------------------------------------------
   // Import Windows system functions
   //----------------------------------------------------------------------------
-  AIR.Import('kernel32.dll', 'ExitProcess', [vtUInt32], vtVoid, False);
+  AIR.Import('kernel32.dll', 'ExitProcess', [gvtUInt32], gvtVoid, False);
 
   //----------------------------------------------------------------------------
   // Gny_Halt(AExitCode: Int32)
@@ -92,8 +92,8 @@ begin
   // At opt level 0, calls Gny_ReportLeaks before ExitProcess for heap
   // leak detection in debug builds.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_Halt', vtVoid, False, plC, False)
-     .Param('AExitCode', vtInt32);
+  AIR.Func('Gny_Halt', gvtVoid, False, plC, False)
+     .Param('AExitCode', gvtInt32);
   // Free command line args before leak reporting
   AIR.Call('Gny_FreeCommandLine', []);
   if AOptLevel = 0 then
@@ -111,19 +111,19 @@ begin
   //----------------------------------------------------------------------------
   // Import C runtime printf (variadic) - used by viper_write/viper_writeln helpers
   //----------------------------------------------------------------------------
-  AIR.Import('msvcrt.dll', 'printf', [vtPointer], vtInt32, True);
+  AIR.Import('msvcrt.dll', 'printf', [gvtPointer], gvtInt32, True);
 
   //----------------------------------------------------------------------------
   // Import Windows console functions for UTF-8 support
   //----------------------------------------------------------------------------
-  AIR.Import('kernel32.dll', 'SetConsoleOutputCP', [vtUInt32], vtInt32, False);
-  AIR.Import('kernel32.dll', 'SetConsoleCP', [vtUInt32], vtInt32, False);
+  AIR.Import('kernel32.dll', 'SetConsoleOutputCP', [gvtUInt32], gvtInt32, False);
+  AIR.Import('kernel32.dll', 'SetConsoleCP', [gvtUInt32], gvtInt32, False);
 
   //----------------------------------------------------------------------------
   // Gny_InitConsole()
   // Initializes the console for UTF-8 output. Called at program startup.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_InitConsole', vtVoid, False, plC, True)
+  AIR.Func('Gny_InitConsole', gvtVoid, False, plC, True)
      // Set console output code page to UTF-8 (65001)
      .Call('SetConsoleOutputCP', [AIR.MakeInt64(65001)])
      // Set console input code page to UTF-8 (65001)
@@ -141,29 +141,29 @@ begin
   //----------------------------------------------------------------------------
   // Import Windows heap functions
   //----------------------------------------------------------------------------
-  AIR.Import('kernel32.dll', 'GetProcessHeap', [], vtPointer, False);
-  AIR.Import('kernel32.dll', 'HeapAlloc', [vtPointer, vtUInt32, vtUInt64], vtPointer, False);
-  AIR.Import('kernel32.dll', 'HeapFree', [vtPointer, vtUInt32, vtPointer], vtInt32, False);
-  AIR.Import('kernel32.dll', 'HeapReAlloc', [vtPointer, vtUInt32, vtPointer, vtUInt64], vtPointer, False);
-  AIR.Import('kernel32.dll', 'HeapSize', [vtPointer, vtUInt32, vtPointer], vtUInt64, False);
+  AIR.Import('kernel32.dll', 'GetProcessHeap', [], gvtPointer, False);
+  AIR.Import('kernel32.dll', 'HeapAlloc', [gvtPointer, gvtUInt32, gvtUInt64], gvtPointer, False);
+  AIR.Import('kernel32.dll', 'HeapFree', [gvtPointer, gvtUInt32, gvtPointer], gvtInt32, False);
+  AIR.Import('kernel32.dll', 'HeapReAlloc', [gvtPointer, gvtUInt32, gvtPointer, gvtUInt64], gvtPointer, False);
+  AIR.Import('kernel32.dll', 'HeapSize', [gvtPointer, gvtUInt32, gvtPointer], gvtUInt64, False);
 
   //----------------------------------------------------------------------------
   // Debug heap tracking (only when optimization level = 0)
   //----------------------------------------------------------------------------
   if AOptLevel = 0 then
   begin
-    AIR.Global('Gny_AllocCount', vtUInt64);
-    AIR.Global('Gny_FreeCount', vtUInt64);
+    AIR.Global('Gny_AllocCount', gvtUInt64);
+    AIR.Global('Gny_FreeCount', gvtUInt64);
   end;
 
   //----------------------------------------------------------------------------
   // Gny_GetMem(ASize: UInt64): Pointer
   // Allocates ASize bytes from the process heap
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_GetMem', vtPointer, False, plC, False)
-     .Param('ASize', vtUInt64)
-     .Local('LHeap', vtPointer)
-     .Local('LResult', vtPointer);
+  AIR.Func('Gny_GetMem', gvtPointer, False, plC, False)
+     .Param('ASize', gvtUInt64)
+     .Local('LHeap', gvtPointer)
+     .Local('LResult', gvtPointer);
 
   AIR.Assign('LHeap', AIR.Invoke('GetProcessHeap', []));
   AIR.Assign('LResult', AIR.Invoke('HeapAlloc', [AIR.Get('LHeap'), AIR.MakeInt64(0), AIR.Get('ASize')]));
@@ -178,9 +178,9 @@ begin
   // Gny_FreeMem(APtr: Pointer)
   // Frees memory previously allocated by Gny_GetMem
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_FreeMem', vtVoid, False, plC, False)
-     .Param('APtr', vtPointer)
-     .Local('LHeap', vtPointer);
+  AIR.Func('Gny_FreeMem', gvtVoid, False, plC, False)
+     .Param('APtr', gvtPointer)
+     .Local('LHeap', gvtPointer);
 
   // Guard: do nothing if pointer is nil
   AIR.When(AIR.Eq(AIR.Get('APtr'), AIR.Null()))
@@ -200,10 +200,10 @@ begin
   // Gny_ReAllocMem(APtr: Pointer; ANewSize: UInt64): Pointer
   // Reallocates memory block to new size
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_ReAllocMem', vtPointer, False, plC, False)
-     .Param('APtr', vtPointer)
-     .Param('ANewSize', vtUInt64)
-     .Local('LHeap', vtPointer)
+  AIR.Func('Gny_ReAllocMem', gvtPointer, False, plC, False)
+     .Param('APtr', gvtPointer)
+     .Param('ANewSize', gvtUInt64)
+     .Local('LHeap', gvtPointer)
      .Assign('LHeap', AIR.Invoke('GetProcessHeap', []))
      .Return(AIR.Invoke('HeapReAlloc', [AIR.Get('LHeap'), AIR.MakeInt64(0), AIR.Get('APtr'), AIR.Get('ANewSize')]))
   .EndFunc();
@@ -212,10 +212,10 @@ begin
   // Gny_AllocMem(ASize: UInt64): Pointer
   // Allocates and zero-initializes memory (uses HEAP_ZERO_MEMORY = 0x08)
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_AllocMem', vtPointer, False, plC, False)
-     .Param('ASize', vtUInt64)
-     .Local('LHeap', vtPointer)
-     .Local('LResult', vtPointer);
+  AIR.Func('Gny_AllocMem', gvtPointer, False, plC, False)
+     .Param('ASize', gvtUInt64)
+     .Local('LHeap', gvtPointer)
+     .Local('LResult', gvtPointer);
 
   AIR.Assign('LHeap', AIR.Invoke('GetProcessHeap', []));
   AIR.Assign('LResult', AIR.Invoke('HeapAlloc', [AIR.Get('LHeap'), AIR.MakeInt64(8), AIR.Get('ASize')]));
@@ -230,9 +230,9 @@ begin
   // Gny_MemSize(APtr: Pointer): UInt64
   // Returns the size of an allocated memory block
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_MemSize', vtUInt64, False, plC, False)
-     .Param('APtr', vtPointer)
-     .Local('LHeap', vtPointer)
+  AIR.Func('Gny_MemSize', gvtUInt64, False, plC, False)
+     .Param('APtr', gvtPointer)
+     .Local('LHeap', gvtPointer)
      .Assign('LHeap', AIR.Invoke('GetProcessHeap', []))
      .Return(AIR.Invoke('HeapSize', [AIR.Get('LHeap'), AIR.MakeInt64(0), AIR.Get('APtr')]))
   .EndFunc();
@@ -243,7 +243,7 @@ begin
   //----------------------------------------------------------------------------
   if AOptLevel = 0 then
   begin
-    AIR.Func('Gny_ReportLeaks', vtVoid, False, plC, True);
+    AIR.Func('Gny_ReportLeaks', gvtVoid, False, plC, True);
     AIR.Call('printf', [AIR.Str('[Heap] Allocs: %llu, Frees: %llu, Leaked: %lld' + #10),
                         AIR.Get('Gny_AllocCount'),
                         AIR.Get('Gny_FreeCount'),
@@ -276,10 +276,10 @@ begin
   //----------------------------------------------------------------------------
   // Import C runtime for memory copy
   //----------------------------------------------------------------------------
-  AIR.Import('ntdll.dll', 'memcpy', [vtPointer, vtPointer, vtUInt64], vtPointer, False);
-  AIR.Import('ntdll.dll', 'memset', [vtPointer, vtInt32, vtUInt64], vtPointer, False);
-  AIR.Import('ntdll.dll', 'memcmp', [vtPointer, vtPointer, vtUInt64], vtInt32, False);
-  AIR.Import('kernel32.dll', 'MultiByteToWideChar', [vtUInt32, vtUInt32, vtPointer, vtInt32, vtPointer, vtInt32], vtInt32, False);
+  AIR.Import('ntdll.dll', 'memcpy', [gvtPointer, gvtPointer, gvtUInt64], gvtPointer, False);
+  AIR.Import('ntdll.dll', 'memset', [gvtPointer, gvtInt32, gvtUInt64], gvtPointer, False);
+  AIR.Import('ntdll.dll', 'memcmp', [gvtPointer, gvtPointer, gvtUInt64], gvtInt32, False);
+  AIR.Import('kernel32.dll', 'MultiByteToWideChar', [gvtUInt32, gvtUInt32, gvtPointer, gvtInt32, gvtPointer, gvtInt32], gvtInt32, False);
 
   //----------------------------------------------------------------------------
   // Ensure string types are defined (idempotent - may already be defined)
@@ -291,10 +291,10 @@ begin
   // Allocates a new string with the specified capacity.
   // RefCount = 1, Length = 0, Data buffer allocated and null-terminated.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrAlloc', vtPointer, False, plC, False)
-     .Param('ACapacity', vtUInt64)
-     .Local('LRec', vtPointer)
-     .Local('LData', vtPointer)
+  AIR.Func('Gny_StrAlloc', gvtPointer, False, plC, False)
+     .Param('ACapacity', gvtUInt64)
+     .Local('LRec', gvtPointer)
+     .Local('LData', gvtPointer)
      // Allocate the TStringRec struct (40 bytes)
      .Assign('LRec', AIR.Invoke('Gny_GetMem', [AIR.MakeInt64(40)]))
      // Allocate data buffer (capacity + 1 for null terminator)
@@ -326,10 +326,10 @@ begin
   // Frees the string's data buffer and the TStringRec struct.
   // Does nothing if AStr is nil.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrFree', vtVoid, False, plC, False)
-     .Param('AStr', vtPointer)
-     .Local('LData', vtPointer)
-     .Local('LData16', vtPointer)
+  AIR.Func('Gny_StrFree', gvtVoid, False, plC, False)
+     .Param('AStr', gvtPointer)
+     .Local('LData', gvtPointer)
+     .Local('LData16', gvtPointer)
      // if AStr = nil then exit
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return()
@@ -357,9 +357,9 @@ begin
   // Gny_StrAddRef(AStr: Pointer)
   // Increments the reference count if not nil and not immortal (-1).
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrAddRef', vtVoid, False, plC, False)
-     .Param('AStr', vtPointer)
-     .Local('LRefCount', vtInt64)
+  AIR.Func('Gny_StrAddRef', gvtVoid, False, plC, False)
+     .Param('AStr', gvtPointer)
+     .Local('LRefCount', gvtInt64)
      // if AStr = nil then exit
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return()
@@ -384,9 +384,9 @@ begin
   // Decrements the reference count. Frees the string if count reaches zero.
   // Does nothing if nil or immortal (-1).
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrRelease', vtVoid, False, plC, False)
-     .Param('AStr', vtPointer)
-     .Local('LRefCount', vtInt64)
+  AIR.Func('Gny_StrRelease', gvtVoid, False, plC, False)
+     .Param('AStr', gvtPointer)
+     .Local('LRefCount', gvtInt64)
      // if AStr = nil then exit
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return()
@@ -417,9 +417,9 @@ begin
   // Only releases when AReason = 0 (DLL_PROCESS_DETACH).
   // Called by SSA cleanup pass for managed globals in DllMain.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_ReleaseOnDetach', vtVoid, False, plC, False)
-     .Param('AReason', vtInt32)
-     .Param('AStr', vtPointer)
+  AIR.Func('Gny_ReleaseOnDetach', gvtVoid, False, plC, False)
+     .Param('AReason', gvtInt32)
+     .Param('AStr', gvtPointer)
      // Only release on DLL_PROCESS_DETACH (reason = 0)
      .When(AIR.Eq(AIR.Get('AReason'), AIR.Int32(0)))
         .Call('Gny_StrRelease', [AIR.Get('AStr')])
@@ -432,11 +432,11 @@ begin
   // Creates a new string from static literal data.
   // Copies the data, sets length, null-terminates.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrFromLiteral', vtPointer, False, plC, False)
-     .Param('AData', vtPointer)
-     .Param('ALen', vtUInt64)
-     .Local('LRec', vtPointer)
-     .Local('LData', vtPointer)
+  AIR.Func('Gny_StrFromLiteral', gvtPointer, False, plC, False)
+     .Param('AData', gvtPointer)
+     .Param('ALen', gvtUInt64)
+     .Local('LRec', gvtPointer)
+     .Local('LData', gvtPointer)
      // Allocate string with capacity = length
      .Assign('LRec', AIR.Invoke('Gny_StrAlloc', [AIR.Get('ALen')]));
 
@@ -459,10 +459,10 @@ begin
   // Creates a new string from a single character.
   // Allocates string, stores char, sets length to 1, null-terminates.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrFromChar', vtPointer, False, plC, False)
-     .Param('AChar', vtUInt64)
-     .Local('LRec', vtPointer)
-     .Local('LData', vtPointer)
+  AIR.Func('Gny_StrFromChar', gvtPointer, False, plC, False)
+     .Param('AChar', gvtUInt64)
+     .Local('LRec', gvtPointer)
+     .Local('LData', gvtPointer)
      // Allocate string with capacity = 1
      .Assign('LRec', AIR.Invoke('Gny_StrAlloc', [AIR.MakeInt64(1)]));
 
@@ -485,16 +485,16 @@ begin
   // Creates a new string that is the concatenation of AStr1 and AStr2.
   // Handles nil strings as empty.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrConcat', vtPointer, False, plC, False)
-     .Param('AStr1', vtPointer)
-     .Param('AStr2', vtPointer)
-     .Local('LLen1', vtUInt64)
-     .Local('LLen2', vtUInt64)
-     .Local('LTotalLen', vtUInt64)
-     .Local('LRec', vtPointer)
-     .Local('LData', vtPointer)
-     .Local('LData1', vtPointer)
-     .Local('LData2', vtPointer)
+  AIR.Func('Gny_StrConcat', gvtPointer, False, plC, False)
+     .Param('AStr1', gvtPointer)
+     .Param('AStr2', gvtPointer)
+     .Local('LLen1', gvtUInt64)
+     .Local('LLen2', gvtUInt64)
+     .Local('LTotalLen', gvtUInt64)
+     .Local('LRec', gvtPointer)
+     .Local('LData', gvtPointer)
+     .Local('LData1', gvtPointer)
+     .Local('LData2', gvtPointer)
      // Get length of first string (0 if nil)
      .When(AIR.Eq(AIR.Get('AStr1'), AIR.Null()))
         .Assign('LLen1', AIR.MakeInt64(0))
@@ -548,16 +548,16 @@ begin
   // Automatically AddRefs source and releases old dest value.
   // Self-assignment safe: AddRef before Release prevents use-after-free.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrAssign', vtVoid, False, plC, False)
-     .Param('ADest', vtPointer)   // Pointer to the string variable
-     .Param('ASrc', vtPointer)    // Source string (TStringRec pointer)
-     .Local('LOld', vtPointer)
+  AIR.Func('Gny_StrAssign', gvtVoid, False, plC, False)
+     .Param('ADest', gvtPointer)   // Pointer to the string variable
+     .Param('ASrc', gvtPointer)    // Source string (TStringRec pointer)
+     .Local('LOld', gvtPointer)
      // Get old value from destination
-     .Assign('LOld', AIR.Deref(AIR.Get('ADest'), vtPointer))
+     .Assign('LOld', AIR.Deref(AIR.Get('ADest'), gvtPointer))
      // AddRef the source FIRST (self-assignment safe: refcount 1->2)
      .Call('Gny_StrAddRef', [AIR.Get('ASrc')])
      // Store new value
-     .SetVal(AIR.Deref(AIR.Get('ADest'), vtPointer), AIR.Get('ASrc'))
+     .SetVal(AIR.Deref(AIR.Get('ADest'), gvtPointer), AIR.Get('ASrc'))
      // Release old value LAST (self-assignment safe: refcount 2->1)
      .Call('Gny_StrRelease', [AIR.Get('LOld')])
      .Return()
@@ -567,8 +567,8 @@ begin
   // Gny_StrLen(AStr: Pointer): UInt64
   // Returns the length of the string in bytes. Returns 0 if nil.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrLen', vtUInt64, False, plC, False)
-     .Param('AStr', vtPointer)
+  AIR.Func('Gny_StrLen', gvtUInt64, False, plC, False)
+     .Param('AStr', gvtPointer)
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return(AIR.MakeInt64(0))
      .EndWhen();
@@ -582,15 +582,15 @@ begin
   // Lexicographic comparison. Returns <0 if AStr1<AStr2, 0 if equal, >0 if AStr1>AStr2.
   // Nil is treated as less than any non-nil string.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrCompare', vtInt64, False, plC, False)
-     .Param('AStr1', vtPointer)
-     .Param('AStr2', vtPointer)
-     .Local('LLen1', vtUInt64)
-     .Local('LLen2', vtUInt64)
-     .Local('LMinLen', vtUInt64)
-     .Local('LData1', vtPointer)
-     .Local('LData2', vtPointer)
-     .Local('LResult', vtInt32)
+  AIR.Func('Gny_StrCompare', gvtInt64, False, plC, False)
+     .Param('AStr1', gvtPointer)
+     .Param('AStr2', gvtPointer)
+     .Local('LLen1', gvtUInt64)
+     .Local('LLen2', gvtUInt64)
+     .Local('LMinLen', gvtUInt64)
+     .Local('LData1', gvtPointer)
+     .Local('LData2', gvtPointer)
+     .Local('LResult', gvtInt32)
      // Check AStr1 nil
      .When(AIR.Eq(AIR.Get('AStr1'), AIR.Null()))
         // AStr1 is nil - check AStr2
@@ -648,8 +648,8 @@ begin
   // Returns pointer to the UTF-8 data (for pchar() conversion).
   // Returns nil if string is nil.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrData', vtPointer, False, plC, False)
-     .Param('AStr', vtPointer)
+  AIR.Func('Gny_StrData', gvtPointer, False, plC, False)
+     .Param('AStr', gvtPointer)
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return(AIR.Null())
      .EndWhen();
@@ -663,13 +663,13 @@ begin
   // Returns pointer to cached UTF-16 data. Converts from UTF-8 on first call.
   // Returns nil if string is nil.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrUtf16', vtPointer, False, plC, False)
-     .Param('AStr', vtPointer)
-     .Local('LData16', vtPointer)
-     .Local('LData', vtPointer)
-     .Local('LLen', vtUInt64)
-     .Local('LWideLen', vtInt32)
-     .Local('LBuf', vtPointer)
+  AIR.Func('Gny_StrUtf16', gvtPointer, False, plC, False)
+     .Param('AStr', gvtPointer)
+     .Local('LData16', gvtPointer)
+     .Local('LData', gvtPointer)
+     .Local('LLen', gvtUInt64)
+     .Local('LWideLen', gvtInt32)
+     .Local('LBuf', gvtPointer)
      // if AStr = nil then return nil
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return(AIR.Null())
@@ -713,11 +713,11 @@ begin
   // Converts UTF-8 literal data to UTF-16. Returns pointer to allocated buffer.
   // Unlike Gny_StrUtf16, this takes raw data pointer + length (no TStringRec).
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_StrLiteralUtf16', vtPointer, False, plC, False)
-     .Param('AData', vtPointer)
-     .Param('ALen', vtUInt64)
-     .Local('LWideLen', vtInt32)
-     .Local('LBuf', vtPointer)
+  AIR.Func('Gny_StrLiteralUtf16', gvtPointer, False, plC, False)
+     .Param('AData', gvtPointer)
+     .Param('ALen', gvtUInt64)
+     .Local('LWideLen', gvtInt32)
+     .Local('LBuf', gvtPointer)
      // Query required buffer size (CP_UTF8 = 65001)
      .Assign('LWideLen', AIR.Invoke('MultiByteToWideChar',
         [AIR.MakeInt64(65001), AIR.MakeInt64(0), AIR.Get('AData'), AIR.Get('ALen'), AIR.Null(), AIR.MakeInt64(0)]))
@@ -745,11 +745,11 @@ procedure TRuntime.AddTypes(const AIR: TIR);
 begin
   // Define TStringRec type
   AIR.DefineRecord('TStringRec')
-     .Field('RefCount', vtInt64)
-     .Field('Length', vtUInt64)
-     .Field('Capacity', vtUInt64)
-     .Field('Data', vtPointer)
-     .Field('Data16', vtPointer)
+     .Field('RefCount', gvtInt64)
+     .Field('Length', gvtUInt64)
+     .Field('Capacity', gvtUInt64)
+     .Field('Data', gvtPointer)
+     .Field('Data16', gvtPointer)
   .EndRecord();
 
   // Register 'string' as a pointer to TStringRec
@@ -773,15 +773,15 @@ begin
   //----------------------------------------------------------------------------
   // Import wcslen for wide string length (msvcrt — same as printf)
   //----------------------------------------------------------------------------
-  AIR.Import('msvcrt.dll', 'wcslen', [vtPointer], vtUInt64, False);
+  AIR.Import('msvcrt.dll', 'wcslen', [gvtPointer], gvtUInt64, False);
 
   //----------------------------------------------------------------------------
   // Gny_WStrLen(AStr: Pointer): UInt64
   // Returns the length of a raw wchar_t* string (number of wide characters).
   // Returns 0 if nil.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_WStrLen', vtUInt64, False, plC, False)
-     .Param('AStr', vtPointer)
+  AIR.Func('Gny_WStrLen', gvtUInt64, False, plC, False)
+     .Param('AStr', gvtPointer)
      .When(AIR.Eq(AIR.Get('AStr'), AIR.Null()))
         .Return(AIR.MakeInt64(0))
      .EndWhen()
@@ -793,13 +793,13 @@ begin
   // Concatenates two raw wchar_t* wide strings. Allocates new buffer via
   // Gny_GetMem. Caller is responsible for freeing. Handles nil as empty.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_WStrConcat', vtPointer, False, plC, False)
-     .Param('AStr1', vtPointer)
-     .Param('AStr2', vtPointer)
-     .Local('LLen1', vtUInt64)
-     .Local('LLen2', vtUInt64)
-     .Local('LTotalLen', vtUInt64)
-     .Local('LBuf', vtPointer)
+  AIR.Func('Gny_WStrConcat', gvtPointer, False, plC, False)
+     .Param('AStr1', gvtPointer)
+     .Param('AStr2', gvtPointer)
+     .Local('LLen1', gvtUInt64)
+     .Local('LLen2', gvtUInt64)
+     .Local('LTotalLen', gvtUInt64)
+     .Local('LBuf', gvtPointer)
      // Get length of first string (0 if nil)
      .When(AIR.Eq(AIR.Get('AStr1'), AIR.Null()))
         .Assign('LLen1', AIR.MakeInt64(0))
@@ -838,13 +838,13 @@ begin
   // Lexicographic comparison of two raw wchar_t* wide strings.
   // Returns -1, 0, or 1. Nil is treated as less than any non-nil string.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_WStrCompare', vtInt64, False, plC, False)
-     .Param('AStr1', vtPointer)
-     .Param('AStr2', vtPointer)
-     .Local('LLen1', vtUInt64)
-     .Local('LLen2', vtUInt64)
-     .Local('LMinLen', vtUInt64)
-     .Local('LResult', vtInt32)
+  AIR.Func('Gny_WStrCompare', gvtInt64, False, plC, False)
+     .Param('AStr1', gvtPointer)
+     .Param('AStr2', gvtPointer)
+     .Local('LLen1', gvtUInt64)
+     .Local('LLen2', gvtUInt64)
+     .Local('LMinLen', gvtUInt64)
+     .Local('LResult', gvtInt32)
      // Check AStr1 nil
      .When(AIR.Eq(AIR.Get('AStr1'), AIR.Null()))
         // AStr1 is nil — check AStr2
@@ -893,10 +893,10 @@ begin
   // of wide characters (not bytes). Allocates (AWideLen+1)*2 bytes and null-
   // terminates. Caller is responsible for freeing via Gny_FreeMem.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_WStrFromLiteral', vtPointer, False, plC, False)
-     .Param('AData', vtPointer)
-     .Param('AWideLen', vtInt64)
-     .Local('LBuf', vtPointer)
+  AIR.Func('Gny_WStrFromLiteral', gvtPointer, False, plC, False)
+     .Param('AData', gvtPointer)
+     .Param('AWideLen', gvtInt64)
+     .Local('LBuf', gvtPointer)
      // Allocate buffer: (AWideLen + 1) * 2 bytes
      .Assign('LBuf', AIR.Invoke('Gny_GetMem',
         [AIR.Mul(AIR.Add(AIR.Get('AWideLen'), AIR.MakeInt64(1)), AIR.MakeInt64(2))]))
@@ -915,10 +915,10 @@ begin
   // Converts a raw wchar_t* wide string to a heap-allocated UTF-8 char*.
   // Returns nil if input is nil. Caller is responsible for freeing.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_Utf8', vtPointer, False, plC, False)
-     .Param('AWStr', vtPointer)
-     .VarDecl('LLen', vtInt32)
-     .VarDecl('LBuf', vtPointer)
+  AIR.Func('Gny_Utf8', gvtPointer, False, plC, False)
+     .Param('AWStr', gvtPointer)
+     .VarDecl('LLen', gvtInt32)
+     .VarDecl('LBuf', gvtPointer)
      // if AWStr = nil then return nil
      .When(AIR.Eq(AIR.Get('AWStr'), AIR.Null()))
         .Return(AIR.Null())
@@ -944,9 +944,9 @@ begin
   //   Tag 1 = wstring → Gny_WStrLen (raw wchar_t*)
   //   Tag 2 = dynarray → Gny_DynLen (length header at ptr-8)
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_Len', vtUInt64, False, plC, False)
-     .Param('ATag', vtInt64)
-     .Param('AVal', vtPointer)
+  AIR.Func('Gny_Len', gvtUInt64, False, plC, False)
+     .Param('ATag', gvtInt64)
+     .Param('AVal', gvtPointer)
 
      // Tag 0: string (managed TStringRec)
      .When(AIR.Eq(AIR.Get('ATag'), AIR.MakeInt64(0)))
@@ -973,15 +973,15 @@ begin
   // at (APtr - 8), i.e. in the 8 bytes immediately before the data pointer.
   // Returns 0 if APtr is nil.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_DynLen', vtUInt64, False, plC, False)
-     .Param('APtr', vtPointer)
-     .Local('LHeader', vtPointer)
+  AIR.Func('Gny_DynLen', gvtUInt64, False, plC, False)
+     .Param('APtr', gvtPointer)
+     .Local('LHeader', gvtPointer)
      .When(AIR.Eq(AIR.Get('APtr'), AIR.Null()))
         .Return(AIR.MakeInt64(0))
      .EndWhen()
      // Length is at APtr - 8
      .Let('LHeader', AIR.Sub(AIR.Get('APtr'), AIR.MakeInt64(8)))
-     .Return(AIR.Deref(AIR.Get('LHeader'), vtUInt64))
+     .Return(AIR.Deref(AIR.Get('LHeader'), gvtUInt64))
   .EndFunc();
 
   //----------------------------------------------------------------------------
@@ -991,16 +991,16 @@ begin
   // Layout: [Length:Int64][Element0][Element1]...
   // The pointer stored in *AVar points to Element0 (past the header).
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_SetLength', vtVoid, False, plC, False)
-     .Param('AVar', vtPointer)
-     .Param('ANewLen', vtInt64)
-     .Param('AElemSize', vtInt64)
-     .Local('LOldPtr', vtPointer)
-     .Local('LBlock', vtPointer)
-     .Local('LDataPtr', vtPointer);
+  AIR.Func('Gny_SetLength', gvtVoid, False, plC, False)
+     .Param('AVar', gvtPointer)
+     .Param('ANewLen', gvtInt64)
+     .Param('AElemSize', gvtInt64)
+     .Local('LOldPtr', gvtPointer)
+     .Local('LBlock', gvtPointer)
+     .Local('LDataPtr', gvtPointer);
 
   // Read old pointer from *AVar
-  AIR.Let('LOldPtr', AIR.Deref(AIR.Get('AVar'), vtPointer));
+  AIR.Let('LOldPtr', AIR.Deref(AIR.Get('AVar'), gvtPointer));
 
   // Free old block if not nil (old block starts at OldPtr - 8)
   AIR.When(AIR.Ne(AIR.Get('LOldPtr'), AIR.Null()))
@@ -1012,13 +1012,13 @@ begin
      [AIR.Add(AIR.MakeInt64(8), AIR.Mul(AIR.Get('ANewLen'), AIR.Get('AElemSize')))]));
 
   // Store length in the header (first 8 bytes)
-  AIR.SetVal(AIR.Deref(AIR.Get('LBlock'), vtInt64), AIR.Get('ANewLen'));
+  AIR.SetVal(AIR.Deref(AIR.Get('LBlock'), gvtInt64), AIR.Get('ANewLen'));
 
   // Data pointer = block + 8
   AIR.Let('LDataPtr', AIR.Add(AIR.Get('LBlock'), AIR.MakeInt64(8)));
 
   // Store data pointer into *AVar
-  AIR.SetVal(AIR.Deref(AIR.Get('AVar'), vtPointer), AIR.Get('LDataPtr'));
+  AIR.SetVal(AIR.Deref(AIR.Get('AVar'), gvtPointer), AIR.Get('LDataPtr'));
 
   AIR.Return();
   AIR.EndFunc();
@@ -1028,8 +1028,8 @@ begin
   // Frees a dynamic array. APtr is the data pointer (block starts at APtr-8).
   // Does nothing if APtr is nil. Used by the cleanup pass for managed locals.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_DynFree', vtVoid, False, plC, False)
-     .Param('APtr', vtPointer)
+  AIR.Func('Gny_DynFree', gvtVoid, False, plC, False)
+     .Param('APtr', gvtPointer)
      .When(AIR.Eq(AIR.Get('APtr'), AIR.Null()))
         .Return()
      .EndWhen()
@@ -1053,25 +1053,25 @@ begin
   //----------------------------------------------------------------------------
   // Import Windows TLS functions
   //----------------------------------------------------------------------------
-  AIR.Import('kernel32.dll', 'TlsAlloc', [], vtUInt32, False);
-  AIR.Import('kernel32.dll', 'TlsGetValue', [vtUInt32], vtPointer, False);
-  AIR.Import('kernel32.dll', 'TlsSetValue', [vtUInt32, vtPointer], vtInt32, False);
-  AIR.Import('kernel32.dll', 'RaiseException', [vtUInt32, vtUInt32, vtUInt32, vtPointer], vtVoid, False);
-  AIR.Import('ntdll.dll', 'strlen', [vtPointer], vtUInt64, False);
+  AIR.Import('kernel32.dll', 'TlsAlloc', [], gvtUInt32, False);
+  AIR.Import('kernel32.dll', 'TlsGetValue', [gvtUInt32], gvtPointer, False);
+  AIR.Import('kernel32.dll', 'TlsSetValue', [gvtUInt32, gvtPointer], gvtInt32, False);
+  AIR.Import('kernel32.dll', 'RaiseException', [gvtUInt32, gvtUInt32, gvtUInt32, gvtPointer], gvtVoid, False);
+  AIR.Import('ntdll.dll', 'strlen', [gvtPointer], gvtUInt64, False);
   // memcpy already imported in AddStrings, but import again to be safe
-  AIR.Import('ntdll.dll', 'memcpy', [vtPointer, vtPointer, vtUInt64], vtPointer, False);
+  AIR.Import('ntdll.dll', 'memcpy', [gvtPointer, gvtPointer, gvtUInt64], gvtPointer, False);
 
   //----------------------------------------------------------------------------
   // Global variables for TLS slot indices
   //----------------------------------------------------------------------------
-  AIR.Global('Gny_TlsExcCode', vtUInt32);   // TLS slot for exception code
-  AIR.Global('Gny_TlsExcMsg', vtUInt32);    // TLS slot for exception message
+  AIR.Global('Gny_TlsExcCode', gvtUInt32);   // TLS slot for exception code
+  AIR.Global('Gny_TlsExcMsg', gvtUInt32);    // TLS slot for exception message
 
   //----------------------------------------------------------------------------
   // Gny_InitExceptions()
   // Allocates TLS slots. Must be called at process/thread startup.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_InitExceptions', vtVoid, False, plC, False)
+  AIR.Func('Gny_InitExceptions', gvtVoid, False, plC, False)
      .Assign('Gny_TlsExcCode', AIR.Invoke('TlsAlloc', []))
      .Assign('Gny_TlsExcMsg', AIR.Invoke('TlsAlloc', []))
      .Return()
@@ -1082,12 +1082,12 @@ begin
   // Internal helper: stores code and copies message to TLS.
   // Frees old message if present.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_SetException', vtVoid, False, plC, False)
-     .Param('ACode', vtInt32)
-     .Param('AMsg', vtPointer)
-     .Local('LOldMsg', vtPointer)
-     .Local('LLen', vtUInt64)
-     .Local('LNewMsg', vtPointer)
+  AIR.Func('Gny_SetException', gvtVoid, False, plC, False)
+     .Param('ACode', gvtInt32)
+     .Param('AMsg', gvtPointer)
+     .Local('LOldMsg', gvtPointer)
+     .Local('LLen', gvtUInt64)
+     .Local('LNewMsg', gvtPointer)
      // Get and free old message if any
      .Assign('LOldMsg', AIR.Invoke('TlsGetValue', [AIR.Get('Gny_TlsExcMsg')]))
      .When(AIR.Ne(AIR.Get('LOldMsg'), AIR.Null()))
@@ -1111,8 +1111,8 @@ begin
   // Gny_Raise(AMsg: Pointer)
   // Raises exception with default code (1) and message.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_Raise', vtVoid, False, plC, False)
-     .Param('AMsg', vtPointer)
+  AIR.Func('Gny_Raise', gvtVoid, False, plC, False)
+     .Param('AMsg', gvtPointer)
      .Call('Gny_SetException', [AIR.MakeInt64(1), AIR.Get('AMsg')])
      // RaiseException(0xE0505858, 0, 0, nil) - 'PXX' custom exception
      .Call('RaiseException', [AIR.MakeInt64($E0505858), AIR.MakeInt64(0), AIR.MakeInt64(0), AIR.Null()])
@@ -1123,9 +1123,9 @@ begin
   // Gny_RaiseCode(ACode: Int32; AMsg: Pointer)
   // Raises exception with custom code and message.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_RaiseCode', vtVoid, False, plC, False)
-     .Param('ACode', vtInt32)
-     .Param('AMsg', vtPointer)
+  AIR.Func('Gny_RaiseCode', gvtVoid, False, plC, False)
+     .Param('ACode', gvtInt32)
+     .Param('AMsg', gvtPointer)
      .Call('Gny_SetException', [AIR.Get('ACode'), AIR.Get('AMsg')])
      // RaiseException(0xE0505858, 0, 0, nil) - 'PXX' custom exception
      .Call('RaiseException', [AIR.MakeInt64($E0505858), AIR.MakeInt64(0), AIR.MakeInt64(0), AIR.Null()])
@@ -1136,7 +1136,7 @@ begin
   // Gny_GetExceptionCode(): Int32
   // Returns the current exception code from TLS.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_GetExceptionCode', vtInt32, False, plC, False)
+  AIR.Func('Gny_GetExceptionCode', gvtInt32, False, plC, False)
      .Return(AIR.Invoke('TlsGetValue', [AIR.Get('Gny_TlsExcCode')]))
   .EndFunc();
 
@@ -1144,7 +1144,7 @@ begin
   // Gny_GetExceptionMessage(): Pointer
   // Returns pointer to the current exception message from TLS.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_GetExceptionMessage', vtPointer, False, plC, False)
+  AIR.Func('Gny_GetExceptionMessage', gvtPointer, False, plC, False)
      .Return(AIR.Invoke('TlsGetValue', [AIR.Get('Gny_TlsExcMsg')]))
   .EndFunc();
 
@@ -1158,11 +1158,11 @@ begin
   // Gny_RaiseCode already called Gny_SetException, so we skip.
   // Returns 1 (EXCEPTION_EXECUTE_HANDLER) to always handle the exception.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_SEHFilter', vtInt32, False, plC, False)
-     .Param('AExcPtrs', vtPointer)
-     .Local('LExcRecord', vtPointer)
-     .Local('LRaw', vtInt64)
-     .Local('LCode', vtInt64)
+  AIR.Func('Gny_SEHFilter', gvtInt32, False, plC, False)
+     .Param('AExcPtrs', gvtPointer)
+     .Local('LExcRecord', gvtPointer)
+     .Local('LRaw', gvtInt64)
+     .Local('LCode', gvtInt64)
      // ExceptionRecord = *(EXCEPTION_POINTERS*) — first field at offset 0
      .Assign('LExcRecord', AIR.Deref(AIR.Get('AExcPtrs')))
      // Load 8 bytes from ExceptionRecord offset 0 (ExceptionCode + ExceptionFlags)
@@ -1187,35 +1187,35 @@ begin
   //----------------------------------------------------------------------------
   // Import Windows command-line functions
   //----------------------------------------------------------------------------
-  AIR.Import('kernel32.dll', 'GetCommandLineW', [], vtPointer, False);
-  AIR.Import('shell32.dll', 'CommandLineToArgvW', [vtPointer, vtPointer], vtPointer, False);
-  AIR.Import('kernel32.dll', 'LocalFree', [vtPointer], vtPointer, False);
+  AIR.Import('kernel32.dll', 'GetCommandLineW', [], gvtPointer, False);
+  AIR.Import('shell32.dll', 'CommandLineToArgvW', [gvtPointer, gvtPointer], gvtPointer, False);
+  AIR.Import('kernel32.dll', 'LocalFree', [gvtPointer], gvtPointer, False);
   AIR.Import('kernel32.dll', 'WideCharToMultiByte',
-    [vtUInt32, vtUInt32, vtPointer, vtInt32, vtPointer, vtInt32, vtPointer, vtPointer],
-    vtInt32, False);
+    [gvtUInt32, gvtUInt32, gvtPointer, gvtInt32, gvtPointer, gvtInt32, gvtPointer, gvtPointer],
+    gvtInt32, False);
   AIR.Import('kernel32.dll', 'GetModuleFileNameW',
-    [vtPointer, vtPointer, vtUInt32], vtUInt32, False);
+    [gvtPointer, gvtPointer, gvtUInt32], gvtUInt32, False);
 
   //----------------------------------------------------------------------------
   // Globals for argc/argv storage
   //----------------------------------------------------------------------------
-  AIR.Global('Gny_Argc', vtInt64);
-  AIR.Global('Gny_Argv', vtPointer);
+  AIR.Global('Gny_Argc', gvtInt64);
+  AIR.Global('Gny_Argv', gvtPointer);
 
   //----------------------------------------------------------------------------
   // Gny_InitCommandLine()
   // Parses command line, converts wide strings to UTF-8.
   // Uses a simple indexed loop to convert each wide string argument.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_InitCommandLine', vtVoid, False, plC, False)
-     .Local('LCmdLine', vtPointer)
-     .Local('LWargv', vtPointer)
-     .Local('LArgc', vtInt32)
-     .Local('i', vtInt64)
-     .Local('LWidePtr', vtPointer)
-     .Local('LLen', vtInt32)
-     .Local('LUtf8', vtPointer)
-     .Local('LWideBuf', vtPointer);
+  AIR.Func('Gny_InitCommandLine', gvtVoid, False, plC, False)
+     .Local('LCmdLine', gvtPointer)
+     .Local('LWargv', gvtPointer)
+     .Local('LArgc', gvtInt32)
+     .Local('i', gvtInt64)
+     .Local('LWidePtr', gvtPointer)
+     .Local('LLen', gvtInt32)
+     .Local('LUtf8', gvtPointer)
+     .Local('LWideBuf', gvtPointer);
 
   // Get wide command line and parse it
   AIR.Assign('LArgc', AIR.MakeInt64(0))  // Zero full 8-byte slot before 32-bit write by CommandLineToArgvW
@@ -1235,7 +1235,7 @@ begin
   // LWidePtr := LWargv[i] (load pointer at offset i*8)
   AIR.Assign('LWidePtr', AIR.Deref(
      AIR.Add(AIR.Get('LWargv'), AIR.Mul(AIR.Get('i'), AIR.MakeInt64(8))),
-     vtPointer));
+     gvtPointer));
 
   // LLen := WideCharToMultiByte(CP_UTF8, 0, LWidePtr, -1, nil, 0, nil, nil)
   AIR.Assign('LLen', AIR.Invoke('WideCharToMultiByte',
@@ -1252,7 +1252,7 @@ begin
 
   // Gny_Argv[i] := LUtf8
   AIR.SetVal(
-     AIR.Deref(AIR.Add(AIR.Get('Gny_Argv'), AIR.Mul(AIR.Get('i'), AIR.MakeInt64(8))), vtPointer),
+     AIR.Deref(AIR.Add(AIR.Get('Gny_Argv'), AIR.Mul(AIR.Get('i'), AIR.MakeInt64(8))), gvtPointer),
      AIR.Get('LUtf8'));
 
   // i := i + 1
@@ -1288,11 +1288,11 @@ begin
 
   // Free old argv[0] (it was allocated by Gny_GetMem in the loop above)
   AIR.Call('Gny_FreeMem', [AIR.Deref(
-     AIR.Get('Gny_Argv'), vtPointer)]);
+     AIR.Get('Gny_Argv'), gvtPointer)]);
 
   // Store new UTF-8 path as argv[0]
   AIR.SetVal(
-     AIR.Deref(AIR.Get('Gny_Argv'), vtPointer),
+     AIR.Deref(AIR.Get('Gny_Argv'), gvtPointer),
      AIR.Get('LUtf8'));
 
   // Free wide buffer
@@ -1305,9 +1305,9 @@ begin
   // Frees all allocated UTF-8 strings and the argv array.
   // Called by Gny_Halt before leak reporting.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_FreeCommandLine', vtVoid, False, plC, False)
-     .Local('i', vtInt64)
-     .Local('LPtr', vtPointer);
+  AIR.Func('Gny_FreeCommandLine', gvtVoid, False, plC, False)
+     .Local('i', gvtInt64)
+     .Local('LPtr', gvtPointer);
 
   // Guard: if Gny_Argv is nil (InitCommandLine was never called), skip cleanup
   AIR.When(AIR.Eq(AIR.Get('Gny_Argv'), AIR.Null()))
@@ -1322,7 +1322,7 @@ begin
   // LPtr := Gny_Argv[i]
   AIR.Assign('LPtr', AIR.Deref(
      AIR.Add(AIR.Get('Gny_Argv'), AIR.Mul(AIR.Get('i'), AIR.MakeInt64(8))),
-     vtPointer));
+     gvtPointer));
 
   // Free the UTF-8 string
   AIR.Call('Gny_FreeMem', [AIR.Get('LPtr')]);
@@ -1341,7 +1341,7 @@ begin
   // Gny_ParamCount(): Int64
   // Returns argc - 1 (Pascal semantics: excludes program name).
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_ParamCount', vtInt64, False, plC, False)
+  AIR.Func('Gny_ParamCount', gvtInt64, False, plC, False)
      .Return(AIR.Sub(AIR.Get('Gny_Argc'), AIR.MakeInt64(1)))
   .EndFunc();
 
@@ -1350,8 +1350,8 @@ begin
   // Returns pointer to UTF-8 string at given index.
   // Returns nil if index out of range.
   //----------------------------------------------------------------------------
-  AIR.Func('Gny_ParamStr', vtPointer, False, plC, False)
-     .Param('AIndex', vtInt64);
+  AIR.Func('Gny_ParamStr', gvtPointer, False, plC, False)
+     .Param('AIndex', gvtInt64);
 
   // Check bounds: AIndex < 0
   AIR.When(AIR.Lt(AIR.Get('AIndex'), AIR.MakeInt64(0)))
@@ -1366,7 +1366,7 @@ begin
   // Return Gny_Argv[AIndex]
   AIR.Return(AIR.Deref(
      AIR.Add(AIR.Get('Gny_Argv'), AIR.Mul(AIR.Get('AIndex'), AIR.MakeInt64(8))),
-     vtPointer))
+     gvtPointer))
   .EndFunc();
 end;
 

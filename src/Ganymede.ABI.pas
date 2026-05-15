@@ -27,22 +27,22 @@ type
     class function EncodeName(const AName: string): string;
     class function EncodeNestedName(const AComponents: array of string): string;
   public
-    class function ManglePrimitiveType(const AType: TValueType): string;
-    class function ManglePointerType(const APointeeType: TValueType;
+    class function ManglePrimitiveType(const AType: TGnyValueType): string;
+    class function ManglePointerType(const APointeeType: TGnyValueType;
       const AIsConst: Boolean = False): string;
     class function MangleFunction(
       const AName: string;
-      const AParams: TArray<TValueType>): string;
+      const AParams: TArray<TGnyValueType>): string;
     class function MangleNestedFunction(
       const AComponents: array of string;
-      const AParams: TArray<TValueType>): string;
+      const AParams: TArray<TGnyValueType>): string;
     class function MangleFunctionWithLinkage(
       const AName: string;
-      const AParams: TArray<TValueType>;
+      const AParams: TArray<TGnyValueType>;
       const ALinkage: TLinkage): string;
     class function MangleNestedFunctionWithLinkage(
       const AComponents: array of string;
-      const AParams: TArray<TValueType>;
+      const AParams: TArray<TGnyValueType>;
       const ALinkage: TLinkage): string;
     class function Demangle(const AMangled: string): string;
     class function IsMangled(const AName: string): Boolean;
@@ -73,27 +73,27 @@ end;
 // TABIMangler - Type Mangling
 //==============================================================================
 
-class function TABIMangler.ManglePrimitiveType(const AType: TValueType): string;
+class function TABIMangler.ManglePrimitiveType(const AType: TGnyValueType): string;
 begin
   case AType of
-    vtVoid:    Result := 'v';
-    vtInt8:    Result := 'a';
-    vtInt16:   Result := 's';
-    vtInt32:   Result := 'i';
-    vtInt64:   Result := 'x';
-    vtUInt8:   Result := 'h';
-    vtUInt16:  Result := 't';
-    vtUInt32:  Result := 'j';
-    vtUInt64:  Result := 'y';
-    vtFloat32: Result := 'f';
-    vtFloat64: Result := 'd';
-    vtPointer: Result := 'Pv';
+    gvtVoid:    Result := 'v';
+    gvtInt8:    Result := 'a';
+    gvtInt16:   Result := 's';
+    gvtInt32:   Result := 'i';
+    gvtInt64:   Result := 'x';
+    gvtUInt8:   Result := 'h';
+    gvtUInt16:  Result := 't';
+    gvtUInt32:  Result := 'j';
+    gvtUInt64:  Result := 'y';
+    gvtFloat32: Result := 'f';
+    gvtFloat64: Result := 'd';
+    gvtPointer: Result := 'Pv';
   else
     Result := 'v';
   end;
 end;
 
-class function TABIMangler.ManglePointerType(const APointeeType: TValueType;
+class function TABIMangler.ManglePointerType(const APointeeType: TGnyValueType;
   const AIsConst: Boolean): string;
 begin
   if AIsConst then
@@ -108,7 +108,7 @@ end;
 
 class function TABIMangler.MangleFunction(
   const AName: string;
-  const AParams: TArray<TValueType>): string;
+  const AParams: TArray<TGnyValueType>): string;
 var
   LI: Integer;
 begin
@@ -125,7 +125,7 @@ end;
 
 class function TABIMangler.MangleNestedFunction(
   const AComponents: array of string;
-  const AParams: TArray<TValueType>): string;
+  const AParams: TArray<TGnyValueType>): string;
 var
   LI: Integer;
 begin
@@ -142,7 +142,7 @@ end;
 
 class function TABIMangler.MangleFunctionWithLinkage(
   const AName: string;
-  const AParams: TArray<TValueType>;
+  const AParams: TArray<TGnyValueType>;
   const ALinkage: TLinkage): string;
 begin
   if ALinkage = plC then
@@ -153,7 +153,7 @@ end;
 
 class function TABIMangler.MangleNestedFunctionWithLinkage(
   const AComponents: array of string;
-  const AParams: TArray<TValueType>;
+  const AParams: TArray<TGnyValueType>;
   const ALinkage: TLinkage): string;
 begin
   if ALinkage = plC then

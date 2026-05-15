@@ -88,7 +88,7 @@ const
   // JIT source — calls lib_add from the .lib
   CJITAddSource =
   '''
-  module jit test_add;
+  module mem test_add;
 
   public routine main(): int64;
   begin
@@ -101,7 +101,7 @@ const
   // JIT source — calls both lib_mul and lib_sub
   CJITMultiSource =
   '''
-  module jit test_multi;
+  module mem test_multi;
 
   public routine main(): int64;
   begin
@@ -114,7 +114,7 @@ const
   // JIT source — calls abs from msvcrt.dll
   CJITDllSource =
   '''
-  module jit test_dll;
+  module mem test_dll;
 
   public routine main(): int64;
   begin
@@ -155,7 +155,7 @@ begin
   LScript := TGanymede.Create();
   try
     LScript.SetStatusCallback(StatusCallback, nil);
-    LScript.ImportLib('mathlib', 'lib_add', [vtInt64, vtInt64], vtInt64, False, plDefault);
+    LScript.ImportLib('mathlib', 'lib_add', [gvtInt64, gvtInt64], gvtInt64, False, plDefault);
     LScript.AddLibPath(LTempDir);
     LScript.LoadFromString(CJITAddSource, 'test_add.pxs');
     if not LScript.Compile() then
@@ -167,7 +167,7 @@ begin
     begin
       Check(True, 'JIT compiled successfully');
 
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 30, 'lib_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
@@ -196,8 +196,8 @@ begin
   LScript := TGanymede.Create();
   try
     LScript.SetStatusCallback(StatusCallback, nil);
-    LScript.ImportLib('mathlib2', 'lib_mul', [vtInt64, vtInt64], vtInt64, False, plDefault);
-    LScript.ImportLib('mathlib2', 'lib_sub', [vtInt64, vtInt64], vtInt64, False, plDefault);
+    LScript.ImportLib('mathlib2', 'lib_mul', [gvtInt64, gvtInt64], gvtInt64, False, plDefault);
+    LScript.ImportLib('mathlib2', 'lib_sub', [gvtInt64, gvtInt64], gvtInt64, False, plDefault);
     LScript.AddLibPath(LTempDir);
     LScript.LoadFromString(CJITMultiSource, 'test_multi.pxs');
 
@@ -209,7 +209,7 @@ begin
     else
     begin
       Check(True, 'JIT compiled successfully');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 34, 'lib_mul(6,7) - lib_sub(10,2) = %d (expected 34)',
         [LResult]);
     end;
@@ -223,7 +223,7 @@ begin
   LScript := TGanymede.Create();
   try
     LScript.SetStatusCallback(StatusCallback);
-    LScript.ImportDll('msvcrt.dll', 'abs', [vtInt64], vtInt64);
+    LScript.ImportDll('msvcrt.dll', 'abs', [gvtInt64], gvtInt64);
     LScript.LoadFromString(CJITDllSource, 'test_dll.pxs');
 
     if not LScript.Compile() then
@@ -234,7 +234,7 @@ begin
     else
     begin
       Check(True, 'JIT compiled successfully');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 42, 'abs(-42) = %d (expected 42)', [LResult]);
     end;
   finally

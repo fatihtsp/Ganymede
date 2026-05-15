@@ -44,7 +44,9 @@ uses
   Ganymede.TestDemo in '..\src\Ganymede.TestDemo.pas',
   Ganymede.TOML in '..\src\Ganymede.TOML.pas',
   Ganymede.Types in '..\src\Ganymede.Types.pas',
-  Ganymede.Utils in '..\src\Ganymede.Utils.pas';
+  Ganymede.Utils in '..\src\Ganymede.Utils.pas',
+  UCommon in 'UCommon.pas',
+  UTest.Script.UnifyCompile in 'UTest.Script.UnifyCompile.pas';
 
 begin
   RunTestbed();

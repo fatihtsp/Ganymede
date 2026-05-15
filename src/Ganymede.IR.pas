@@ -45,10 +45,10 @@ type
   //============================================================================
   TTypeRef = record
     IsPrimitive: Boolean;
-    Primitive: TValueType;    // Valid when IsPrimitive = True
+    Primitive: TGnyValueType;    // Valid when IsPrimitive = True
     TypeIndex: Integer;          // Valid when IsPrimitive = False (index into type registry)
 
-    class function FromPrimitive(const AType: TValueType): TTypeRef; static;
+    class function FromPrimitive(const AType: TGnyValueType): TTypeRef; static;
     class function FromComposite(const AIndex: Integer): TTypeRef; static;
     class function None(): TTypeRef; static;
     function IsValid(): Boolean;
@@ -69,8 +69,8 @@ type
     TIRImport = record
       DllName: string;
       FuncName: string;
-      ParamTypes: TArray<TValueType>;
-      ReturnType: TValueType;
+      ParamTypes: TArray<TGnyValueType>;
+      ReturnType: TGnyValueType;
       IsVarArgs: Boolean;
       IsStatic: Boolean;       // True for ImportLib (static linking)
       Linkage: TLinkage;  // plC = raw name, plDefault = Itanium mangled
@@ -90,7 +90,7 @@ type
     //--------------------------------------------------------------------------
     TIRGlobal = record
       GlobalName: string;
-      GlobalType: TValueType;
+      GlobalType: TGnyValueType;
       GlobalTypeRef: TTypeRef;  // For composite/managed types (string)
       InitExpr: Integer;  // -1 if uninitialized
       IsPublic: Boolean;  // If True, exported in DLL .edata section
@@ -226,7 +226,7 @@ type
       SetElements: TArray<Integer>;  // Individual element values (adjusted by LowBound)
       // For ekVaArgAt
       VaArgIndex: Integer;       // Expression index for the arg index
-      VaArgType: TValueType;  // Type to read as
+      VaArgType: TGnyValueType;  // Type to read as
     end;
 
     //--------------------------------------------------------------------------
@@ -289,14 +289,14 @@ type
     //--------------------------------------------------------------------------
     TIRFunc = record
       FuncName: string;
-      ReturnType: TValueType;
+      ReturnType: TGnyValueType;
       ReturnSize: Integer;          // Size in bytes (for composite return types)
       ReturnAlignment: Integer;     // Alignment in bytes (for ABI classification)
       IsEntryPoint: Boolean;
       IsDllEntry: Boolean;        // If True, this is the DllMain entry point
       IsPublic: Boolean;          // If True, export this function
       Linkage: TLinkage;
-      ParamTypes: TArray<TValueType>;  // For mangling
+      ParamTypes: TArray<TGnyValueType>;  // For mangling
       Vars: TList<TIRVar>;
       Stmts: TList<TIRStmt>;
       IsVariadic: Boolean;        // If True, function accepts variadic args
@@ -416,7 +416,7 @@ type
     TIREnumType = record
       TypeName: string;
       Values: TArray<TIREnumValue>;
-      BaseType: TValueType;  // Usually vtInt32
+      BaseType: TGnyValueType;  // Usually vtInt32
     end;
 
     //--------------------------------------------------------------------------
@@ -517,8 +517,8 @@ type
     {$HINTS ON}
 
     // Type system helpers
-    function GetPrimitiveSize(const AType: TValueType): Integer;
-    function GetPrimitiveAlignment(const AType: TValueType): Integer;
+    function GetPrimitiveSize(const AType: TGnyValueType): Integer;
+    function GetPrimitiveAlignment(const AType: TGnyValueType): Integer;
     procedure FinalizeRecordLayout(const ATypeIndex: Integer);
     procedure FinalizeUnionLayout(const ATypeIndex: Integer);
     function FindVarType(const AVarName: string): TTypeRef;
@@ -533,8 +533,8 @@ type
     function Import(
       const ADllName: string;
       const AFuncName: string;
-      const AParams: array of TValueType;
-      const AReturn: TValueType = vtVoid;
+      const AParams: array of TGnyValueType;
+      const AReturn: TGnyValueType = gvtVoid;
       const AVarArgs: Boolean = False;
       const ALinkage: TLinkage = plC
     ): TIR;
@@ -542,8 +542,8 @@ type
     function ImportLib(
       const ALibName: string;
       const AFuncName: string;
-      const AParams: array of TValueType;
-      const AReturn: TValueType = vtVoid;
+      const AParams: array of TGnyValueType;
+      const AReturn: TGnyValueType = gvtVoid;
       const AVarArgs: Boolean = False;
       const ALinkage: TLinkage = plC
     ): TIR;
@@ -551,15 +551,15 @@ type
     function ImportHost(
       const AFuncName: string;
       const AHostAddr: Pointer;
-      const AParams: array of TValueType;
-      const AReturn: TValueType = vtVoid
+      const AParams: array of TGnyValueType;
+      const AReturn: TGnyValueType = gvtVoid
     ): TIR;
 
     //--------------------------------------------------------------------------
     // Global Variables
     //--------------------------------------------------------------------------
-    function Global(const AName: string; const AType: TValueType; const AIsPublic: Boolean = False): TIR; overload;
-    function Global(const AName: string; const AType: TValueType; const AInit: TIRExpr; const AIsPublic: Boolean = False): TIR; overload;
+    function Global(const AName: string; const AType: TGnyValueType; const AIsPublic: Boolean = False): TIR; overload;
+    function Global(const AName: string; const AType: TGnyValueType; const AInit: TIRExpr; const AIsPublic: Boolean = False): TIR; overload;
     function Global(const AName: string; const ATypeRef: TTypeRef; const AIsPublic: Boolean = False): TIR; overload;
     function Global(const AName: string; const ATypeName: string; const AIsPublic: Boolean = False): TIR; overload;
 
@@ -570,9 +570,9 @@ type
     function DefineRecord(const AName: string; const AIsPacked: Boolean = False;
       const AExplicitAlign: Integer = 0; const ABaseTypeName: string = ''): TIR;
     function BeginRecord(): TIR;  // Anonymous record in union
-    function Field(const AName: string; const AType: TValueType): TIR; overload;
+    function Field(const AName: string; const AType: TGnyValueType): TIR; overload;
     function Field(const AName: string; const ATypeName: string): TIR; overload;
-    function BitField(const AName: string; const AType: TValueType; const ABitWidth: Integer): TIR;
+    function BitField(const AName: string; const AType: TGnyValueType; const ABitWidth: Integer): TIR;
     function EndRecord(): TIR;
 
     // Union types
@@ -581,11 +581,11 @@ type
     function EndUnion(): TIR;
 
     // Array types
-    function DefineArray(const AName: string; const AElementType: TValueType;
+    function DefineArray(const AName: string; const AElementType: TGnyValueType;
       const ALowBound: Integer; const AHighBound: Integer): TIR; overload;
     function DefineArray(const AName: string; const AElementTypeName: string;
       const ALowBound: Integer; const AHighBound: Integer): TIR; overload;
-    function DefineDynArray(const AName: string; const AElementType: TValueType): TIR; overload;
+    function DefineDynArray(const AName: string; const AElementType: TGnyValueType): TIR; overload;
     function DefineDynArray(const AName: string; const AElementTypeName: string): TIR; overload;
 
     // Enum types
@@ -595,21 +595,21 @@ type
     function EndEnum(): TIR;
 
     // Type aliases
-    function DefineAlias(const AName: string; const AType: TValueType): TIR; overload;
+    function DefineAlias(const AName: string; const AType: TGnyValueType): TIR; overload;
     function DefineAlias(const AName: string; const ATypeName: string): TIR; overload;
 
     // Pointer types
     function DefinePointer(const AName: string): TIR; overload;
-    function DefinePointer(const AName: string; const APointeeType: TValueType;
+    function DefinePointer(const AName: string; const APointeeType: TGnyValueType;
       const AIsConst: Boolean = False): TIR; overload;
     function DefinePointer(const AName: string; const APointeeTypeName: string;
       const AIsConst: Boolean = False): TIR; overload;
 
     // Routine (procedural) types
     function DefineRoutine(const AName: string; const ALinkage: TLinkage = plDefault): TIR;
-    function RoutineParam(const AType: TValueType): TIR; overload;
+    function RoutineParam(const AType: TGnyValueType): TIR; overload;
     function RoutineParam(const ATypeName: string): TIR; overload;
-    function RoutineReturns(const AType: TValueType): TIR; overload;
+    function RoutineReturns(const AType: TGnyValueType): TIR; overload;
     function RoutineReturns(const ATypeName: string): TIR; overload;
     function RoutineVarArgs(): TIR;
     function EndRoutine(): TIR;
@@ -635,28 +635,28 @@ type
     //--------------------------------------------------------------------------
     function Func(
       const AName: string;
-      const AReturnType: TValueType = vtVoid;
+      const AReturnType: TGnyValueType = gvtVoid;
       const AIsEntryPoint: Boolean = False;
       const ALinkage: TLinkage = plDefault;
       const AIsPublic: Boolean = False
     ): TIR;
     function OverloadFunc(
       const AName: string;
-      const AReturnType: TValueType = vtVoid;
+      const AReturnType: TGnyValueType = gvtVoid;
       const AIsEntryPoint: Boolean = False;
       const AIsPublic: Boolean = False
     ): TIR;
     function VariadicFunc(
       const AName: string;
-      const AReturnType: TValueType = vtVoid;
+      const AReturnType: TGnyValueType = gvtVoid;
       const AIsEntryPoint: Boolean = False;
       const AIsPublic: Boolean = False
     ): TIR;
     function DllMain(): TIR;
-    function Param(const AName: string; const AType: TValueType; const AByRef: Boolean = False): TIR; overload;
+    function Param(const AName: string; const AType: TGnyValueType; const AByRef: Boolean = False): TIR; overload;
     function Param(const AName: string; const ATypeName: string; const AByRef: Boolean = False): TIR; overload;
     function Returns(const ATypeName: string): TIR;
-    function Local(const AName: string; const AType: TValueType): TIR; overload;
+    function Local(const AName: string; const AType: TGnyValueType): TIR; overload;
     function Local(const AName: string; const ATypeName: string): TIR; overload;
     function EndFunc(): TIR;
 
@@ -679,7 +679,7 @@ type
 
     // Short aliases
     function Let(const ADest: string; const AValue: TIRExpr): TIR;
-    function VarDecl(const AName: string; const AType: TValueType): TIR; overload;
+    function VarDecl(const AName: string; const AType: TGnyValueType): TIR; overload;
     function VarDecl(const AName: string; const ATypeName: string): TIR; overload;
     function Ret(): TIR; overload;
     function Ret(const AValue: TIRExpr): TIR; overload;
@@ -814,7 +814,7 @@ type
     function AddrOfVal(const AExpr: TIRExpr): TIRExpr;
     function Deref(const APtr: TIRExpr): TIRExpr; overload;
     function Deref(const APtr: TIRExpr; const ATypeName: string): TIRExpr; overload;
-    function Deref(const APtr: TIRExpr; const AType: TValueType): TIRExpr; overload;
+    function Deref(const APtr: TIRExpr; const AType: TGnyValueType): TIRExpr; overload;
 
     //--------------------------------------------------------------------------
     // Expressions - Function Pointers
@@ -880,7 +880,7 @@ type
     // Expressions - Variadic Intrinsics
     //--------------------------------------------------------------------------
     function VaCount(): TIRExpr;
-    function VaArg(const AIndex: TIRExpr; const AType: TValueType): TIRExpr;
+    function VaArg(const AIndex: TIRExpr; const AType: TGnyValueType): TIRExpr;
 
 
     //--------------------------------------------------------------------------
@@ -996,7 +996,7 @@ end;
 // TTypeRef
 //==============================================================================
 
-class function TTypeRef.FromPrimitive(const AType: TValueType): TTypeRef;
+class function TTypeRef.FromPrimitive(const AType: TGnyValueType): TTypeRef;
 begin
   Result := Default(TTypeRef);
   Result.IsPrimitive := True;
@@ -1008,7 +1008,7 @@ class function TTypeRef.FromComposite(const AIndex: Integer): TTypeRef;
 begin
   Result := Default(TTypeRef);
   Result.IsPrimitive := False;
-  Result.Primitive := vtVoid;
+  Result.Primitive := gvtVoid;
   Result.TypeIndex := AIndex;
 end;
 
@@ -1016,21 +1016,21 @@ class function TTypeRef.None(): TTypeRef;
 begin
   Result := Default(TTypeRef);
   Result.IsPrimitive := True;
-  Result.Primitive := vtVoid;
+  Result.Primitive := gvtVoid;
   Result.TypeIndex := -1;
 end;
 
 function TTypeRef.IsValid(): Boolean;
 begin
   if IsPrimitive then
-    Result := Primitive <> vtVoid
+    Result := Primitive <> gvtVoid
   else
     Result := TypeIndex >= 0;
 end;
 
 function TTypeRef.ToString(): string;
 const
-  CPrimitiveNames: array[TValueType] of string = (
+  CPrimitiveNames: array[TGnyValueType] of string = (
     'void', 'int8', 'int16', 'int32', 'int64',
     'uint8', 'uint16', 'uint32', 'uint64',
     'float32', 'float64', 'pointer'
@@ -1207,27 +1207,27 @@ end;
 // TIR - Type System Helpers
 //==============================================================================
 
-function TIR.GetPrimitiveSize(const AType: TValueType): Integer;
+function TIR.GetPrimitiveSize(const AType: TGnyValueType): Integer;
 begin
   case AType of
-    vtVoid:    Result := 0;
-    vtInt8:    Result := 1;
-    vtInt16:   Result := 2;
-    vtInt32:   Result := 4;
-    vtInt64:   Result := 8;
-    vtUInt8:   Result := 1;
-    vtUInt16:  Result := 2;
-    vtUInt32:  Result := 4;
-    vtUInt64:  Result := 8;
-    vtFloat32: Result := 4;
-    vtFloat64: Result := 8;
-    vtPointer: Result := 8;
+    gvtVoid:    Result := 0;
+    gvtInt8:    Result := 1;
+    gvtInt16:   Result := 2;
+    gvtInt32:   Result := 4;
+    gvtInt64:   Result := 8;
+    gvtUInt8:   Result := 1;
+    gvtUInt16:  Result := 2;
+    gvtUInt32:  Result := 4;
+    gvtUInt64:  Result := 8;
+    gvtFloat32: Result := 4;
+    gvtFloat64: Result := 8;
+    gvtPointer: Result := 8;
   else
     Result := 8;
   end;
 end;
 
-function TIR.BitField(const AName: string; const AType: TValueType; const ABitWidth: Integer): TIR;
+function TIR.BitField(const AName: string; const AType: TGnyValueType; const ABitWidth: Integer): TIR;
 var
   LEntry: TIRTypeEntry;
   LField: TIRRecordField;
@@ -1273,7 +1273,7 @@ begin
   FTypes[FBuildingRecordIndex] := LEntry;
 end;
 
-function TIR.GetPrimitiveAlignment(const AType: TValueType): Integer;
+function TIR.GetPrimitiveAlignment(const AType: TGnyValueType): Integer;
 begin
   // On x64, alignment equals size for primitives (up to 8)
   Result := GetPrimitiveSize(AType);
@@ -1685,7 +1685,7 @@ begin
   FTypes.Add(LEntry);
 end;
 
-function TIR.Field(const AName: string; const AType: TValueType): TIR;
+function TIR.Field(const AName: string; const AType: TGnyValueType): TIR;
 var
   LEntry: TIRTypeEntry;
   LField: TIRRecordField;
@@ -1929,7 +1929,7 @@ begin
   FBuildingUnionIndex := -1;
 end;
 
-function TIR.DefineArray(const AName: string; const AElementType: TValueType;
+function TIR.DefineArray(const AName: string; const AElementType: TGnyValueType;
   const ALowBound: Integer; const AHighBound: Integer): TIR;
 var
   LEntry: TIRTypeEntry;
@@ -1980,7 +1980,7 @@ begin
   FTypes.Add(LEntry);
 end;
 
-function TIR.DefineDynArray(const AName: string; const AElementType: TValueType): TIR;
+function TIR.DefineDynArray(const AName: string; const AElementType: TGnyValueType): TIR;
 var
   LEntry: TIRTypeEntry;
 begin
@@ -2033,7 +2033,7 @@ begin
   LEntry := Default(TIRTypeEntry);
   LEntry.Kind := tkEnum;
   LEntry.EnumType.TypeName := AName;
-  LEntry.EnumType.BaseType := vtInt32;
+  LEntry.EnumType.BaseType := gvtInt32;
   SetLength(LEntry.EnumType.Values, 0);
 
   FBuildingEnumIndex := FTypes.Count;
@@ -2114,7 +2114,7 @@ begin
   FNextEnumOrdinal := 0;
 end;
 
-function TIR.DefineAlias(const AName: string; const AType: TValueType): TIR;
+function TIR.DefineAlias(const AName: string; const AType: TGnyValueType): TIR;
 var
   LEntry: TIRTypeEntry;
 begin
@@ -2170,7 +2170,7 @@ begin
   FTypes.Add(LEntry);
 end;
 
-function TIR.DefinePointer(const AName: string; const APointeeType: TValueType;
+function TIR.DefinePointer(const AName: string; const APointeeType: TGnyValueType;
   const AIsConst: Boolean): TIR;
 var
   LEntry: TIRTypeEntry;
@@ -2232,7 +2232,7 @@ begin
   LEntry := Default(TIRTypeEntry);
   LEntry.Kind := tkRoutine;
   LEntry.RoutineType.TypeName := AName;
-  LEntry.RoutineType.ReturnType := TTypeRef.FromPrimitive(vtVoid);  // Default return type
+  LEntry.RoutineType.ReturnType := TTypeRef.FromPrimitive(gvtVoid);  // Default return type
   LEntry.RoutineType.Linkage := ALinkage;
   LEntry.RoutineType.IsVarArgs := False;
 
@@ -2240,7 +2240,7 @@ begin
   FTypes.Add(LEntry);
 end;
 
-function TIR.RoutineParam(const AType: TValueType): TIR;
+function TIR.RoutineParam(const AType: TGnyValueType): TIR;
 var
   LEntry: TIRTypeEntry;
   LLen: Integer;
@@ -2291,7 +2291,7 @@ begin
   FTypes[FBuildingRoutineIndex] := LEntry;
 end;
 
-function TIR.RoutineReturns(const AType: TValueType): TIR;
+function TIR.RoutineReturns(const AType: TGnyValueType): TIR;
 var
   LEntry: TIRTypeEntry;
 begin
@@ -2753,8 +2753,8 @@ end;
 function TIR.Import(
   const ADllName: string;
   const AFuncName: string;
-  const AParams: array of TValueType;
-  const AReturn: TValueType;
+  const AParams: array of TGnyValueType;
+  const AReturn: TGnyValueType;
   const AVarArgs: Boolean;
   const ALinkage: TLinkage
 ): TIR;
@@ -2809,8 +2809,8 @@ end;
 function TIR.ImportLib(
   const ALibName: string;
   const AFuncName: string;
-  const AParams: array of TValueType;
-  const AReturn: TValueType;
+  const AParams: array of TGnyValueType;
+  const AReturn: TGnyValueType;
   const AVarArgs: Boolean;
   const ALinkage: TLinkage
 ): TIR;
@@ -2867,8 +2867,8 @@ end;
 function TIR.ImportHost(
   const AFuncName: string;
   const AHostAddr: Pointer;
-  const AParams: array of TValueType;
-  const AReturn: TValueType
+  const AParams: array of TGnyValueType;
+  const AReturn: TGnyValueType
 ): TIR;
 var
   LImport: TIRImport;
@@ -2896,7 +2896,7 @@ end;
 // TIR - Global Variables
 //==============================================================================
 
-function TIR.Global(const AName: string; const AType: TValueType; const AIsPublic: Boolean): TIR;
+function TIR.Global(const AName: string; const AType: TGnyValueType; const AIsPublic: Boolean): TIR;
 var
   LGlobal: TIRGlobal;
 begin
@@ -2911,7 +2911,7 @@ begin
   Result := Self;
 end;
 
-function TIR.Global(const AName: string; const AType: TValueType; const AInit: TIRExpr; const AIsPublic: Boolean): TIR;
+function TIR.Global(const AName: string; const AType: TGnyValueType; const AInit: TIRExpr; const AIsPublic: Boolean): TIR;
 var
   LGlobal: TIRGlobal;
 begin
@@ -2932,7 +2932,7 @@ var
 begin
   LGlobal := Default(TIRGlobal);
   LGlobal.GlobalName := AName;
-  LGlobal.GlobalType := vtPointer;  // Managed types are pointers
+  LGlobal.GlobalType := gvtPointer;  // Managed types are pointers
   LGlobal.GlobalTypeRef := ATypeRef;
   LGlobal.InitExpr := -1;  // Uninitialized
   LGlobal.IsPublic := AIsPublic;
@@ -2958,7 +2958,7 @@ begin
 
   LGlobal := Default(TIRGlobal);
   LGlobal.GlobalName := AName;
-  LGlobal.GlobalType := vtPointer;  // Managed/composite types are pointers
+  LGlobal.GlobalType := gvtPointer;  // Managed/composite types are pointers
   LGlobal.GlobalTypeRef := TTypeRef.FromComposite(LTypeIndex);
   LGlobal.InitExpr := -1;  // Uninitialized
   LGlobal.IsPublic := AIsPublic;
@@ -2972,7 +2972,7 @@ end;
 
 function TIR.Func(
   const AName: string;
-  const AReturnType: TValueType;
+  const AReturnType: TGnyValueType;
   const AIsEntryPoint: Boolean;
   const ALinkage: TLinkage;
   const AIsPublic: Boolean
@@ -2998,7 +2998,7 @@ end;
 
 function TIR.OverloadFunc(
   const AName: string;
-  const AReturnType: TValueType;
+  const AReturnType: TGnyValueType;
   const AIsEntryPoint: Boolean;
   const AIsPublic: Boolean
 ): TIR;
@@ -3041,7 +3041,7 @@ end;
 
 function TIR.VariadicFunc(
   const AName: string;
-  const AReturnType: TValueType;
+  const AReturnType: TGnyValueType;
   const AIsEntryPoint: Boolean;
   const AIsPublic: Boolean
 ): TIR;
@@ -3087,7 +3087,7 @@ begin
   // In our types: (vtPointer, vtUInt32, vtPointer) -> vtInt32
   LFunc := Default(TIRFunc);
   LFunc.FuncName := 'DllMain';
-  LFunc.ReturnType := vtInt32;  // BOOL
+  LFunc.ReturnType := gvtInt32;  // BOOL
   LFunc.IsEntryPoint := False;  // Not the EXE entry point
   LFunc.IsDllEntry := True;     // This IS the DLL entry point
   LFunc.IsPublic := False;      // Not exported (OS calls it directly)
@@ -3100,14 +3100,14 @@ begin
   FFunctions.Add(LFunc);
 
   // Add standard DllMain parameters
-  Param('hinstDLL', vtPointer);   // HINSTANCE
-  Param('fdwReason', vtUInt32);   // DWORD
-  Param('lpvReserved', vtPointer); // LPVOID
+  Param('hinstDLL', gvtPointer);   // HINSTANCE
+  Param('fdwReason', gvtUInt32);   // DWORD
+  Param('lpvReserved', gvtPointer); // LPVOID
 
   Result := Self;
 end;
 
-function TIR.Param(const AName: string; const AType: TValueType; const AByRef: Boolean): TIR;
+function TIR.Param(const AName: string; const AType: TGnyValueType; const AByRef: Boolean): TIR;
 var
   LVar: TIRVar;
   LFunc: TIRFunc;
@@ -3176,13 +3176,13 @@ begin
   end;
 
   // Set return type to pointer (large structs are returned via hidden pointer)
-  LFunc.ReturnType := vtPointer;
+  LFunc.ReturnType := gvtPointer;
   LFunc.ReturnSize := GetTypeSize(TTypeRef.FromComposite(LTypeIndex));
   LFunc.ReturnAlignment := GetTypeAlignment(TTypeRef.FromComposite(LTypeIndex));
   FFunctions[FCurrentFunc] := LFunc;
 end;
 
-function TIR.Local(const AName: string; const AType: TValueType): TIR;
+function TIR.Local(const AName: string; const AType: TGnyValueType): TIR;
 var
   LVar: TIRVar;
   LFunc: TIRFunc;
@@ -3391,7 +3391,7 @@ begin
   Result := Assign(ADest, AValue);
 end;
 
-function TIR.VarDecl(const AName: string; const AType: TValueType): TIR;
+function TIR.VarDecl(const AName: string; const AType: TGnyValueType): TIR;
 begin
   Result := Local(AName, AType);
 end;
@@ -3983,7 +3983,7 @@ begin
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
   // Int64 literal
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt64);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt64);
   Result := AddExpr(LNode);
 end;
 
@@ -3994,7 +3994,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt32);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt32);
   Result := AddExpr(LNode);
 end;
 
@@ -4006,7 +4006,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstFloat;
   LNode.ConstFloat := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtFloat64);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtFloat64);
   Result := AddExpr(LNode);
 end;
 
@@ -4025,7 +4025,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt8);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt8);
   Result := AddExpr(LNode);
 end;
 
@@ -4036,7 +4036,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt16);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt16);
   Result := AddExpr(LNode);
 end;
 
@@ -4047,7 +4047,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtUInt8);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtUInt8);
   Result := AddExpr(LNode);
 end;
 
@@ -4058,7 +4058,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtUInt16);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtUInt16);
   Result := AddExpr(LNode);
 end;
 
@@ -4069,7 +4069,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtUInt32);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtUInt32);
   Result := AddExpr(LNode);
 end;
 
@@ -4080,7 +4080,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := System.Int64(AValue);
-  LNode.ResultType := TTypeRef.FromPrimitive(vtUInt64);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtUInt64);
   Result := AddExpr(LNode);
 end;
 
@@ -4091,7 +4091,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstFloat;
   LNode.ConstFloat := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtFloat32);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtFloat32);
   Result := AddExpr(LNode);
 end;
 
@@ -4102,7 +4102,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekConstInt;
   LNode.ConstInt := 0;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtPointer);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtPointer);
   Result := AddExpr(LNode);
 end;
 
@@ -4182,18 +4182,18 @@ end;
 
 function TIR.IntToFloat64(const AValue: TIRExpr): TIRExpr;
 var
-  LSrcType: TValueType;
+  LSrcType: TGnyValueType;
 begin
   // Check source expression type to decide conversion
   if (AValue.Index >= 0) and (AValue.Index < FExpressions.Count) then
   begin
     LSrcType := FExpressions[AValue.Index].ResultType.Primitive;
     // Already float — no conversion needed
-    if LSrcType in [vtFloat32, vtFloat64] then
+    if LSrcType in [gvtFloat32, gvtFloat64] then
       Exit(AValue);
     // Known integer type — emit CVTSI2SD
-    if LSrcType in [vtInt8, vtInt16, vtInt32, vtInt64,
-                    vtUInt8, vtUInt16, vtUInt32, vtUInt64] then
+    if LSrcType in [gvtInt8, gvtInt16, gvtInt32, gvtInt64,
+                    gvtUInt8, gvtUInt16, gvtUInt32, gvtUInt64] then
       Exit(MakeUnaryExpr(AValue, opIntToFloat));
   end;
   // Unknown/untracked type — emit conversion (safe default)
@@ -4202,18 +4202,18 @@ end;
 
 function TIR.Float64ToInt(const AValue: TIRExpr): TIRExpr;
 var
-  LSrcType: TValueType;
+  LSrcType: TGnyValueType;
 begin
   // Check source expression type to decide conversion
   if (AValue.Index >= 0) and (AValue.Index < FExpressions.Count) then
   begin
     LSrcType := FExpressions[AValue.Index].ResultType.Primitive;
     // Already integer — no conversion needed
-    if LSrcType in [vtInt8, vtInt16, vtInt32, vtInt64,
-                    vtUInt8, vtUInt16, vtUInt32, vtUInt64] then
+    if LSrcType in [gvtInt8, gvtInt16, gvtInt32, gvtInt64,
+                    gvtUInt8, gvtUInt16, gvtUInt32, gvtUInt64] then
       Exit(AValue);
     // Known float type — emit CVTTSD2SI
-    if LSrcType in [vtFloat32, vtFloat64] then
+    if LSrcType in [gvtFloat32, gvtFloat64] then
       Exit(MakeUnaryExpr(AValue, opFloatToInt));
   end;
   // Unknown/untracked type — passthrough (assume integer, safer than corrupt)
@@ -4365,7 +4365,7 @@ begin
   LNode.Kind := ekUnary;
   LNode.Op := opAddrOf;
   LNode.Left := AExpr.Index;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtPointer);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtPointer);
   Result := AddExpr(LNode);
 end;
 
@@ -4395,7 +4395,7 @@ begin
   Result := AddExpr(LNode);
 end;
 
-function TIR.Deref(const APtr: TIRExpr; const AType: TValueType): TIRExpr;
+function TIR.Deref(const APtr: TIRExpr; const AType: TGnyValueType): TIRExpr;
 var
   LNode: TIRExprNode;
 begin
@@ -4419,7 +4419,7 @@ begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekFuncAddr;
   LNode.FuncAddrName := AFuncName;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtPointer);  // Function pointer is pointer-sized
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtPointer);  // Function pointer is pointer-sized
   Result := AddExpr(LNode);
 end;
 
@@ -4534,7 +4534,7 @@ var
 begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekGetExceptionCode;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt32);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt32);
   Result := AddExpr(LNode);
 end;
 
@@ -4544,7 +4544,7 @@ var
 begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekGetExceptionMsg;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtPointer);  // Pointer to string data
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtPointer);  // Pointer to string data
   Result := AddExpr(LNode);
 end;
 
@@ -4896,11 +4896,11 @@ var
 begin
   LNode := Default(TIRExprNode);
   LNode.Kind := ekVaCount;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt32);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt32);
   Result := AddExpr(LNode);
 end;
 
-function TIR.VaArg(const AIndex: TIRExpr; const AType: TValueType): TIRExpr;
+function TIR.VaArg(const AIndex: TIRExpr; const AType: TGnyValueType): TIRExpr;
 var
   LNode: TIRExprNode;
 begin
@@ -5334,7 +5334,7 @@ begin
   LNode := Default(TIR.TIRExprNode);
   LNode.Kind := TIR.TIRExprKind.ekConstInt;
   LNode.ConstInt := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt64);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt64);
 
   Result.Index := LIR.FExpressions.Count;
   Result.Owner := AOwner;
@@ -5350,7 +5350,7 @@ begin
   LNode := Default(TIR.TIRExprNode);
   LNode.Kind := TIR.TIRExprKind.ekConstFloat;
   LNode.ConstFloat := AValue;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtFloat64);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtFloat64);
 
   Result.Index := LIR.FExpressions.Count;
   Result.Owner := AOwner;
@@ -5369,7 +5369,7 @@ begin
     LNode.ConstInt := 1
   else
     LNode.ConstInt := 0;
-  LNode.ResultType := TTypeRef.FromPrimitive(vtInt32);
+  LNode.ResultType := TTypeRef.FromPrimitive(gvtInt32);
 
   Result.Index := LIR.FExpressions.Count;
   Result.Owner := AOwner;

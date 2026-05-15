@@ -242,7 +242,7 @@ type
     SourceFile: string;
     
     // For sikVaArgAt
-    VaArgType: TValueType;  // Type to read vararg as
+    VaArgType: TGnyValueType;  // Type to read vararg as
     // For sized memory access (field loads/stores)
     MemSize: Integer;            // 0=default 8 bytes, 1/2/4/8=explicit size
     MemIsFloat: Boolean;         // True for float32/float64 field access
@@ -340,7 +340,7 @@ type
   TSSAFunc = class(TGnyBaseObject)
   private
     FFuncName: string;
-    FReturnType: TValueType;
+    FReturnType: TGnyValueType;
     FReturnSize: Integer;
     FReturnAlignment: Integer;
     FIsEntryPoint: Boolean;
@@ -359,8 +359,8 @@ type
     destructor Destroy(); override;
     
     // Setup
-    procedure SetReturnType(const AType: TValueType); overload;
-    procedure SetReturnType(const AType: TValueType; const ASize: Integer; const AAlignment: Integer); overload;
+    procedure SetReturnType(const AType: TGnyValueType); overload;
+    procedure SetReturnType(const AType: TGnyValueType; const ASize: Integer; const AAlignment: Integer); overload;
     procedure SetIsEntryPoint(const AValue: Boolean);
     procedure SetIsDllEntry(const AValue: Boolean);
     procedure SetIsPublic(const AValue: Boolean);
@@ -384,7 +384,7 @@ type
     
     // Getters
     function GetFuncName(): string;
-    function GetReturnType(): TValueType;
+    function GetReturnType(): TGnyValueType;
     function GetReturnSize(): Integer;
     function GetReturnAlignment(): Integer;
     function GetIsEntryPoint(): Boolean;
@@ -951,7 +951,7 @@ begin
   inherited Create();
   
   FFuncName := AFuncName;
-  FReturnType := vtVoid;
+  FReturnType := gvtVoid;
   FIsEntryPoint := False;
   FIsDllEntry := False;
   FLocals := TList<TSSALocalInfo>.Create();
@@ -971,14 +971,14 @@ begin
   inherited Destroy();
 end;
 
-procedure TSSAFunc.SetReturnType(const AType: TValueType);
+procedure TSSAFunc.SetReturnType(const AType: TGnyValueType);
 begin
   FReturnType := AType;
   FReturnSize := 0;
   FReturnAlignment := 0;
 end;
 
-procedure TSSAFunc.SetReturnType(const AType: TValueType;
+procedure TSSAFunc.SetReturnType(const AType: TGnyValueType;
   const ASize: Integer; const AAlignment: Integer);
 begin
   FReturnType := AType;
@@ -1081,7 +1081,7 @@ begin
   Result := FFuncName;
 end;
 
-function TSSAFunc.GetReturnType(): TValueType;
+function TSSAFunc.GetReturnType(): TGnyValueType;
 begin
   Result := FReturnType;
 end;
@@ -2678,7 +2678,7 @@ begin
                   LInstr.Op2 := TSSAOperand.FromVar(LExprVar);
                   LInstr.MemSize := LDestExprNode.FieldSize;
                   LInstr.MemIsFloat := LDestExprNode.ResultType.IsPrimitive and
-                    (LDestExprNode.ResultType.Primitive in [vtFloat32, vtFloat64]);
+                    (LDestExprNode.ResultType.Primitive in [gvtFloat32, gvtFloat64]);
                   ASSAFunc.GetCurrentBlock().AddInstruction(LInstr);
                 end;
               end
@@ -2735,7 +2735,7 @@ begin
                 LInstr.Op2 := TSSAOperand.FromVar(LExprVar);
                 LInstr.MemSize := LDestExprNode.ElementSize;
                 LInstr.MemIsFloat := LDestExprNode.ResultType.IsPrimitive and
-                  (LDestExprNode.ResultType.Primitive in [vtFloat32, vtFloat64]);
+                  (LDestExprNode.ResultType.Primitive in [gvtFloat32, gvtFloat64]);
                 ASSAFunc.GetCurrentBlock().AddInstruction(LInstr);
               end
               else if (LDestExprNode.Kind = TIR.TIRExprKind.ekUnary) and 
@@ -3992,13 +3992,13 @@ begin
             LInstr.Op1 := TSSAOperand.FromVar(LLeftVar);
             // Set MemSize based on variable type
             case LExpr.ResultType.Primitive of
-              vtInt8, vtUInt8:   LInstr.MemSize := 1;
-              vtInt16, vtUInt16: LInstr.MemSize := 2;
-              vtInt32, vtUInt32, vtFloat32: LInstr.MemSize := 4;
+              gvtInt8, gvtUInt8:   LInstr.MemSize := 1;
+              gvtInt16, gvtUInt16: LInstr.MemSize := 2;
+              gvtInt32, gvtUInt32, gvtFloat32: LInstr.MemSize := 4;
             else
               LInstr.MemSize := 0;  // 0 = full 64-bit (default)
             end;
-            LInstr.MemIsFloat := LExpr.ResultType.Primitive in [vtFloat32, vtFloat64];
+            LInstr.MemIsFloat := LExpr.ResultType.Primitive in [gvtFloat32, gvtFloat64];
             ASSAFunc.GetCurrentBlock().AddInstruction(LInstr);
 
             Result := LResultVar;
@@ -4507,7 +4507,7 @@ begin
           LInstr.Op1 := TSSAOperand.FromVar(LLeftVar);
           LInstr.MemSize := LExpr.FieldSize;
           LInstr.MemIsFloat := LExpr.ResultType.IsPrimitive and
-            (LExpr.ResultType.Primitive in [vtFloat32, vtFloat64]);
+            (LExpr.ResultType.Primitive in [gvtFloat32, gvtFloat64]);
           ASSAFunc.GetCurrentBlock().AddInstruction(LInstr);
         end;
         
@@ -4616,7 +4616,7 @@ begin
           LInstr.Dest := LResultVar;
           LInstr.Op1 := TSSAOperand.FromVar(LLeftVar);
           LInstr.MemSize := LExpr.ElementSize;
-          LInstr.MemIsFloat := LExpr.ResultType.Primitive in [vtFloat32, vtFloat64];
+          LInstr.MemIsFloat := LExpr.ResultType.Primitive in [gvtFloat32, gvtFloat64];
           ASSAFunc.GetCurrentBlock().AddInstruction(LInstr);
         end;
         

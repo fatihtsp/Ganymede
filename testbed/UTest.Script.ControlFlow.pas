@@ -34,7 +34,7 @@ uses
 const
   CControlFlowSource =
   '''
-  module jit ctrlflow;
+  module mem ctrlflow;
 
   // While loop: sum 1..n
   public routine whilesum(n: int32): int32;
@@ -177,39 +177,39 @@ begin
       Check(True, 'Compiled successfully (opt %d)', [LOrd]);
 
       // whilesum(10): 1+2+...+10 = 55
-      LResult := LScript.Invoke('whilesum', [10], vtInt64).AsInt64;
+      LResult := LScript.Invoke('whilesum', [10], gvtInt64).AsInt64;
       Check(LResult = 55,
         'whilesum(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
 
       // forsum(10): 1+2+...+10 = 55
-      LResult := LScript.Invoke('forsum', [10], vtInt64).AsInt64;
+      LResult := LScript.Invoke('forsum', [10], gvtInt64).AsInt64;
       Check(LResult = 55,
         'forsum(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
 
       // countdown(10): 10+9+...+1 = 55
-      LResult := LScript.Invoke('countdown', [10], vtInt64).AsInt64;
+      LResult := LScript.Invoke('countdown', [10], gvtInt64).AsInt64;
       Check(LResult = 55,
         'countdown(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
 
       // repeatsum(10): 1+2+...+10 = 55
-      LResult := LScript.Invoke('repeatsum', [10], vtInt64).AsInt64;
+      LResult := LScript.Invoke('repeatsum', [10], gvtInt64).AsInt64;
       Check(LResult = 55,
         'repeatsum(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
 
       // earlyexit(100): 1+2+3+4+5 = 15 (s>10 triggers leave before adding 6)
-      LResult := LScript.Invoke('earlyexit', [100], vtInt64).AsInt64;
+      LResult := LScript.Invoke('earlyexit', [100], gvtInt64).AsInt64;
       Check(LResult = 15,
         'earlyexit(100) = %d (expected 15, opt %d)', [LResult, LOrd]);
 
       // skipodd(10): 1+3+5+7+9 = 25 (skip evens)
-      LResult := LScript.Invoke('skipodd', [10], vtInt64).AsInt64;
+      LResult := LScript.Invoke('skipodd', [10], gvtInt64).AsInt64;
       Check(LResult = 25,
         'skipodd(10) = %d (expected 25, opt %d)', [LResult, LOrd]);
 
       // nested(3): sum of i*j for i,j in 1..3
       // = 1*1+1*2+1*3+2*1+2*2+2*3+3*1+3*2+3*3
       // = (1+2+3)*(1+2+3) = 6*6 = 36
-      LResult := LScript.Invoke('nested', [3], vtInt64).AsInt64;
+      LResult := LScript.Invoke('nested', [3], gvtInt64).AsInt64;
       Check(LResult = 36,
         'nested(3) = %d (expected 36, opt %d)', [LResult, LOrd]);
     finally

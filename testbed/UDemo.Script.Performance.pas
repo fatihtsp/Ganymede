@@ -22,7 +22,8 @@ uses
   System.Diagnostics,
   Ganymede.Utils,
   Ganymede.Native,
-  Ganymede;
+  Ganymede,
+  UCommon;
 
 const
   FIB_N = 30;
@@ -67,8 +68,8 @@ begin
     LNative.SetOptimizationLevel(2);
 
     // Define fib as a recursive function
-    LNative.Func('fib', vtInt64, False, plDefault, True)
-      .Arg('n', vtInt64)
+    LNative.Func('fib', gvtInt64, False, plDefault, True)
+      .Arg('n', gvtInt64)
       .When(LNative.Lt(LNative.Get('n'), LNative.Int64(2)))
         .Ret(LNative.Get('n'))
       .EndWhen()
@@ -111,7 +112,7 @@ var
 const
   CFibSource =
   '''
-  module jit fibonacci;
+  module mem fibonacci;
 
   public routine fib(n: int64): int64;
   begin
@@ -139,7 +140,7 @@ begin
 
     // Benchmark via Invoke (string lookup + arg boxing)
     LSW := TStopwatch.StartNew();
-    LResult := LScript.Invoke('fib', [FIB_N], vtInt64).AsInt64;
+    LResult := LScript.Invoke('fib', [FIB_N], gvtInt64).AsInt64;
     LSW.Stop();
     Result := LSW.Elapsed.TotalMilliseconds;
     Assert(LResult = 832040);
@@ -163,21 +164,20 @@ end;
 procedure RunScriptPerformanceDemo();
 var
   LNativeMs: Double;
-  LJITMs: Double;
   LScriptMs: Double;
   LDirectMs: Double;
 begin
-  TGnyUtils.PrintLn(COLOR_CYAN + '  PIXELS™ Native JIT — fib(%d) Benchmark', [FIB_N]);
+  TGnyUtils.PrintLn(COLOR_CYAN + '  Ganymede™ Native JIT — fib(%d) Benchmark', [FIB_N]);
   TGnyUtils.PrintLn(COLOR_CYAN + '  =========================================================');
   TGnyUtils.PrintLn('');
 
   TGnyUtils.PrintLn(COLOR_WHITE + '  Running native Delphi...');
   LNativeMs := BenchNative();
 
-  TGnyUtils.PrintLn(COLOR_WHITE + '  Running native JIT...');
-  LJITMs := BenchNativeJIT();
+  //TGnyUtils.PrintLn(COLOR_WHITE + '  Running native JIT...');
+  //LJITMs := BenchNativeJIT();
 
-  TGnyUtils.PrintLn(COLOR_WHITE + '  Running PxlScript JIT...');
+  TGnyUtils.PrintLn(COLOR_WHITE + '  Running Native Script...');
   LScriptMs := BenchScriptJIT(LDirectMs);
 
   TGnyUtils.PrintLn('');
@@ -186,16 +186,18 @@ begin
   TGnyUtils.PrintLn(COLOR_WHITE + '  %-24s %10s %8s', ['Implementation', 'Time (ms)', 'Ratio']);
   TGnyUtils.PrintLn(COLOR_WHITE + '  %-24s %10s %8s', ['------------------------', '----------', '--------']);
   TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native Delphi', LNativeMs, 1.0]);
-  TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native JIT', LJITMs, LJITMs / LNativeMs]);
+  //TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native JIT', LJITMs, LJITMs / LNativeMs]);
   if LScriptMs >= 0 then
   begin
-    TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['PxlScript (Invoke)', LScriptMs, LScriptMs / LNativeMs]);
-    TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['PxlScript (Direct)', LDirectMs, LDirectMs / LNativeMs]);
+    TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native Script (Invoke)', LScriptMs, LScriptMs / LNativeMs]);
+    TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native Sript (Direct)', LDirectMs, LDirectMs / LNativeMs]);
   end
   else
     TGnyUtils.PrintLn(COLOR_RED + '  %-24s %10s %8s', ['PxlScript JIT', 'FAILED', 'N/A']);
   TGnyUtils.PrintLn(COLOR_WHITE + '  %-24s %10s %8s', ['------------------------', '----------', '--------']);
   TGnyUtils.PrintLn('');
+
+  PrintBenchmarkReference();
 end;
 
 end.

@@ -1,4 +1,4 @@
-{===============================================================================
+﻿{===============================================================================
   Ganymede™ - Embeddable Native Scripting Engine
 
   Copyright © 2026-present tinyBigGAMES™ LLC
@@ -27,7 +27,8 @@ uses
   UTest.Script.ControlFlow,
   UTest.Script.StringIO,
   UTest.Script.ImportHost,
-  UTest.Script.ImportLib;
+  UTest.Script.ImportLib,
+  UTest.Script.UnifyCompile;
 
 procedure Menu();
 var
@@ -44,20 +45,22 @@ begin
           RunScriptPerformanceDemo();
           TGnyUtils.Pause();
         end)
-      .Add('Script: Vars & Assignment',
+      .Add('Vars & Assignment',
         procedure begin TGnyTestCase.Run(TScriptVarAssignTest) end)
-      .Add('Script: Constants',
+      .Add('Constants',
         procedure begin TGnyTestCase.Run(TScriptConstantsTest) end)
-      .Add('Script: Numeric Ops',
+      .Add('Numeric Ops',
         procedure begin TGnyTestCase.Run(TScriptNumericOpsTest) end)
-      .Add('Script: Control Flow',
+      .Add('Control Flow',
         procedure begin TGnyTestCase.Run(TScriptControlFlowTest) end)
-      .Add('Script: Strings & I/O',
+      .Add('Strings & I/O',
         procedure begin TGnyTestCase.Run(TScriptStringIOTest) end)
-      .Add('Script: Import Host',
+      .Add('Import Host',
         procedure begin TGnyTestCase.Run(TScriptImportHostTest) end)
-      .Add('Script: Import Lib',
-        procedure begin TGnyTestCase.Run(TScriptImportLibTest) end);
+      .Add('Import Lib',
+        procedure begin TGnyTestCase.Run(TScriptImportLibTest) end)
+      .Add('Unified Compile',
+        procedure begin TGnyTestCase.Run(TScriptUnifyCompileTest) end);
     LMenu.Run();
   finally
     LMenu.Free();
@@ -73,11 +76,12 @@ begin
     begin
       TGnyUtils.PrintLn('');
       TGnyUtils.PrintLn(COLOR_RED + 'EXCEPTION: %s', [E.Message]);
+
+      if TGnyUtils.RunFromIDE() then
+        TGnyUtils.Pause();
     end;
   end;
 
-  if TGnyUtils.RunFromIDE() then
-    TGnyUtils.Pause();
 end;
 
 end.

@@ -300,7 +300,7 @@ begin
   LModTok := Expect(tkModule);
   LModNode := AddNode(nkModule, LModTok.Range);
 
-  // Module kind: exe | dll | lib | unit | jit
+  // Module kind: exe | dll | lib | unit | mem
   LKindTok := Advance();
   LNode := FNodes[LModNode];
   LNode.Extra := LKindTok.Text; // store module kind

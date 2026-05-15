@@ -35,7 +35,7 @@ uses
 const
   CConstSource =
   '''
-  module jit consttest;
+  module mem consttest;
 
   public routine compute(x: int32): int32;
   const
@@ -53,7 +53,7 @@ const
 
   CConstAssignSource =
   '''
-  module jit constassign;
+  module mem constassign;
 
   public routine bad(): int32;
   const
@@ -106,7 +106,7 @@ begin
       Check(True, 'Compiled successfully (opt %d)', [LOrd]);
 
       // compute(5) = 100 + 5*3 = 115
-      LResult := LScript.Invoke('compute', [5], vtInt64).AsInt64;
+      LResult := LScript.Invoke('compute', [5], gvtInt64).AsInt64;
       Check(LResult = 115, 'compute(5) = %d (expected 115, opt %d)', [LResult, LOrd]);
 
       LCompute := LScript.GetSymbol('compute');
@@ -114,11 +114,11 @@ begin
       Check(LResult = 115, 'direct compute(5) = %d (expected 115, opt %d)', [LResult, LOrd]);
 
       // compute(0) = 100 + 0*3 = 100
-      LResult := LScript.Invoke('compute', [0], vtInt64).AsInt64;
+      LResult := LScript.Invoke('compute', [0], gvtInt64).AsInt64;
       Check(LResult = 100, 'compute(0) = %d (expected 100, opt %d)', [LResult, LOrd]);
 
       // compute(-10) = 100 + (-10)*3 = 70
-      LResult := LScript.Invoke('compute', [-10], vtInt64).AsInt64;
+      LResult := LScript.Invoke('compute', [-10], gvtInt64).AsInt64;
       Check(LResult = 70, 'compute(-10) = %d (expected 70, opt %d)', [LResult, LOrd]);
     finally
       LScript.Free();

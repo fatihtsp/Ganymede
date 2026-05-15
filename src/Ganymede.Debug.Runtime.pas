@@ -873,28 +873,28 @@ begin
 
       // Determine byte size from type
       case LVar.VarType of
-        vtInt8, vtUInt8:   LSize := 1;
-        vtInt16, vtUInt16: LSize := 2;
-        vtInt32, vtUInt32, vtFloat32: LSize := 4;
-        vtInt64, vtUInt64, vtFloat64, vtPointer: LSize := 8;
+        gvtInt8, gvtUInt8:   LSize := 1;
+        gvtInt16, gvtUInt16: LSize := 2;
+        gvtInt32, gvtUInt32, gvtFloat32: LSize := 4;
+        gvtInt64, gvtUInt64, gvtFloat64, gvtPointer: LSize := 8;
       else
         LSize := 8;
       end;
 
       // Type name string for DAP
       case LVar.VarType of
-        vtVoid:    LResult.VarType := 'void';
-        vtInt8:    LResult.VarType := 'i8';
-        vtInt16:   LResult.VarType := 'i16';
-        vtInt32:   LResult.VarType := 'i32';
-        vtInt64:   LResult.VarType := 'i64';
-        vtUInt8:   LResult.VarType := 'u8';
-        vtUInt16:  LResult.VarType := 'u16';
-        vtUInt32:  LResult.VarType := 'u32';
-        vtUInt64:  LResult.VarType := 'u64';
-        vtFloat32: LResult.VarType := 'f32';
-        vtFloat64: LResult.VarType := 'f64';
-        vtPointer: LResult.VarType := 'ptr';
+        gvtVoid:    LResult.VarType := 'void';
+        gvtInt8:    LResult.VarType := 'i8';
+        gvtInt16:   LResult.VarType := 'i16';
+        gvtInt32:   LResult.VarType := 'i32';
+        gvtInt64:   LResult.VarType := 'i64';
+        gvtUInt8:   LResult.VarType := 'u8';
+        gvtUInt16:  LResult.VarType := 'u16';
+        gvtUInt32:  LResult.VarType := 'u32';
+        gvtUInt64:  LResult.VarType := 'u64';
+        gvtFloat32: LResult.VarType := 'f32';
+        gvtFloat64: LResult.VarType := 'f64';
+        gvtPointer: LResult.VarType := 'ptr';
       else
         LResult.VarType := 'unknown';
       end;
@@ -909,27 +909,27 @@ begin
           if Length(LBytes) = LSize then
           begin
             case LVar.VarType of
-              vtInt8:
+              gvtInt8:
                 LResult.VarValue := IntToStr(ShortInt(LBytes[0]));
-              vtUInt8:
+              gvtUInt8:
                 LResult.VarValue := IntToStr(LBytes[0]);
-              vtInt16:
+              gvtInt16:
                 LResult.VarValue := IntToStr(SmallInt(PWord(@LBytes[0])^));
-              vtUInt16:
+              gvtUInt16:
                 LResult.VarValue := IntToStr(PWord(@LBytes[0])^);
-              vtInt32:
+              gvtInt32:
                 LResult.VarValue := IntToStr(PInteger(@LBytes[0])^);
-              vtUInt32:
+              gvtUInt32:
                 LResult.VarValue := IntToStr(PCardinal(@LBytes[0])^);
-              vtInt64:
+              gvtInt64:
                 LResult.VarValue := IntToStr(PInt64(@LBytes[0])^);
-              vtUInt64:
+              gvtUInt64:
                 LResult.VarValue := UIntToStr(PUInt64(@LBytes[0])^);
-              vtFloat32:
+              gvtFloat32:
                 LResult.VarValue := FormatFloat('0.######', PSingle(@LBytes[0])^);
-              vtFloat64:
+              gvtFloat64:
                 LResult.VarValue := FormatFloat('0.##############', PDouble(@LBytes[0])^);
-              vtPointer:
+              gvtPointer:
                 LResult.VarValue := Format('0x%x', [PUInt64(@LBytes[0])^]);
             else
               LResult.VarValue := Format('0x%x', [PUInt64(@LBytes[0])^]);

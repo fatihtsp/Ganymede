@@ -29,6 +29,20 @@ uses
 const
   GNY_SCRIPT_EXT = 'pxs';
 
+  //--- Value type aliases (re-exported from Ganymede.Types) -------------------
+  gvtVoid    = TGnyValueType.gvtVoid;
+  gvtInt8    = TGnyValueType.gvtInt8;
+  gvtInt16   = TGnyValueType.gvtInt16;
+  gvtInt32   = TGnyValueType.gvtInt32;
+  gvtInt64   = TGnyValueType.gvtInt64;
+  gvtUInt8   = TGnyValueType.gvtUInt8;
+  gvtUInt16  = TGnyValueType.gvtUInt16;
+  gvtUInt32  = TGnyValueType.gvtUInt32;
+  gvtUInt64  = TGnyValueType.gvtUInt64;
+  gvtFloat32 = TGnyValueType.gvtFloat32;
+  gvtFloat64 = TGnyValueType.gvtFloat64;
+  gvtPointer = TGnyValueType.gvtPointer;
+
 type
   { TGnyOptLevel }
   TGnyOptLevel = (
@@ -98,7 +112,10 @@ type
     FSource: string;
     FFilename: string;
     FOptimizationLevel: TGnyOptLevel;
+    FOutputPath: string;
+    FDumpIR: Boolean;
     function GetCompiled(): Boolean;
+    function ValueTypeToStr(const AType: TGnyValueType): string;
     procedure ResetBackend();
 
   public
@@ -113,23 +130,26 @@ type
       const AFilename: string = ''): TGanymede;
     function LoadFromFile(const AFilename: string): TGanymede;
 
-    // Compile — lex + parse + semantic + emit + BuildJIT (all-in-one)
+    // Compile — lex + parse + semantic + emit + build (routes by module kind)
     function Compile(): Boolean;
 
-    // Compile to .lib file on disk
+    // Convenience — set output path then compile (for lib/exe modules)
     function CompileToLib(const AOutputPath: string): Boolean;
+
+    // Set output path for lib/exe targets (derived from filename if not set)
+    function SetOutputPath(const APath: string): TGanymede;
 
     // Register a host function pointer for JIT calls
     function ImportHost(const AFuncName: string;
       const AHostAddr: Pointer;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = vtVoid): TGanymede;
+      const AReturn: TGnyValueType = gvtVoid): TGanymede;
 
     // Register a static library import for JIT calls
     function ImportLib(const ALibName: string;
       const AFuncName: string;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = vtVoid;
+      const AReturn: TGnyValueType = gvtVoid;
       const AVarArgs: Boolean = False;
       const ALinkage: TGnyLinkage = plC): TGanymede;
 
@@ -137,7 +157,7 @@ type
     function ImportDll(const ADllName: string;
       const AFuncName: string;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = vtVoid;
+      const AReturn: TGnyValueType = gvtVoid;
       const AVarArgs: Boolean = False;
       const ALinkage: TGnyLinkage = plC): TGanymede;
 
@@ -152,7 +172,7 @@ type
     // Invocation — single unified method
     function Invoke(const AName: string;
       const AArgs: array of const;
-      const AReturn: TGnyValueType = vtVoid): TGnyValue;
+      const AReturn: TGnyValueType = gvtVoid): TGnyValue;
 
     // Debug - report heap allocations/frees/leaks (opt level 0 only)
     procedure ReportLeaks();
@@ -160,6 +180,9 @@ type
     // Debug — SSA IR dump (call after Compile, before running)
     procedure SetDumpIR(const AValue: Boolean);
     function GetSSADump(): string;
+
+    // Print all errors/warnings/hints with color-coded severity
+    procedure PrintErrors();
 
     // State
     property Compiled: Boolean read GetCompiled;
@@ -213,6 +236,8 @@ begin
   end;
 
   FJIT := nil;
+  FOutputPath := 'output';
+  FDumpIR := False;
 end;
 
 destructor TGanymede.Destroy();
@@ -405,34 +430,47 @@ begin
   // Replay stored lib search paths
   for LI := 0 to FLibPaths.Count - 1 do
     FBackend.AddLibPath(FLibPaths[LI]);
+
+  // Replay DumpIR flag
+  if FDumpIR then
+    FBackend.SetDumpIR(True);
+end;
+
+function TGanymede.ValueTypeToStr(const AType: TGnyValueType): string;
+begin
+  case AType of
+    gvtVoid:    Result := 'void';
+    gvtInt8:    Result := 'int8';
+    gvtInt16:   Result := 'int16';
+    gvtInt32:   Result := 'int32';
+    gvtInt64:   Result := 'int64';
+    gvtUInt8:   Result := 'uint8';
+    gvtUInt16:  Result := 'uint16';
+    gvtUInt32:  Result := 'uint32';
+    gvtUInt64:  Result := 'uint64';
+    gvtFloat32: Result := 'float32';
+    gvtFloat64: Result := 'float64';
+    gvtPointer: Result := 'pointer';
+  else
+    Result := 'void';
+  end;
+end;
+
+function TGanymede.SetOutputPath(const APath: string): TGanymede;
+begin
+  FOutputPath := APath;
+  Result := Self;
 end;
 
 function TGanymede.Compile(): Boolean;
-
-  function ValueTypeToStr(const AType: TValueType): string;
-  begin
-    case AType of
-      vtVoid:    Result := 'void';
-      vtInt8:    Result := 'int8';
-      vtInt16:   Result := 'int16';
-      vtInt32:   Result := 'int32';
-      vtInt64:   Result := 'int64';
-      vtUInt8:   Result := 'uint8';
-      vtUInt16:  Result := 'uint16';
-      vtUInt32:  Result := 'uint32';
-      vtUInt64:  Result := 'uint64';
-      vtFloat32: Result := 'float32';
-      vtFloat64: Result := 'float64';
-      vtPointer: Result := 'pointer';
-    else
-      Result := 'void';
-    end;
-  end;
-
 var
   LIR: TIR;
   LImport: TIR.TIRImport;
   LI: Integer;
+  LModuleKind: string;
+  LOutputFile: string;
+  LModuleName: string;
+  LExt: string;
 begin
   Result := False;
 
@@ -447,6 +485,9 @@ begin
   // Phase 2: Parse
   if not FParser.Parse(FLexer.Tokens) then
     Exit;
+
+  // Read module kind from AST (mem, lib, exe)
+  LModuleKind := FParser.Nodes[FParser.Root].Extra;
 
   // Pre-register imported functions (from API/host) as known externals
   LIR := FBackend.GetIR();
@@ -468,79 +509,65 @@ begin
   if not FEmitter.Emit(FParser.Nodes, FParser.Root, FBackend, FSemantics) then
     Exit;
 
-  // Phase 5: Build JIT
-  FJIT := FBackend.BuildJIT();
-  Result := FJIT <> nil;
+  // Phase 5: Build — route by module kind
+  if LModuleKind = 'mem' then
+  begin
+    // Compile to memory (JIT)
+    FJIT := FBackend.BuildJIT();
+    Result := FJIT <> nil;
 
-  // Initialize console for UTF-8 output via runtime (idempotent)
-  if Result and FJIT.HasSymbol('Gny_InitConsole') then
-    Invoke('Gny_InitConsole', []);
+    // Initialize console for UTF-8 output via runtime (idempotent)
+    if Result and FJIT.HasSymbol('Gny_InitConsole') then
+      Invoke('Gny_InitConsole', []);
+  end
+  else if (LModuleKind = 'lib') or (LModuleKind = 'exe') then
+  begin
+    // Resolve output file path
+    if TPath.HasExtension(FOutputPath) then
+    begin
+      // FOutputPath is a full file path (set by CompileToLib convenience)
+      LOutputFile := FOutputPath;
+    end
+    else
+    begin
+      // FOutputPath is a directory — derive filename from module name
+      LModuleName := FParser.Nodes[FParser.Root].Text;
+      if LModuleKind = 'lib' then
+        LExt := '.lib'
+      else
+        LExt := '.exe';
+      LOutputFile := TPath.Combine(FOutputPath, LModuleName + LExt);
+    end;
+
+    // Ensure output directory exists
+    TGnyUtils.CreateDirInPath(LOutputFile);
+
+    if LModuleKind = 'lib' then
+      FBackend.TargetLib(LOutputFile)
+    else
+      FBackend.TargetExe(LOutputFile);
+
+    Result := FBackend.Build(False);
+  end
+  else
+  begin
+    FErrors.Add(esError, '', 'Unknown module kind: %s', [LModuleKind]);
+    Exit;
+  end;
 end;
 
 function TGanymede.CompileToLib(const AOutputPath: string): Boolean;
-
-  function ValueTypeToStr(const AType: TValueType): string;
-  begin
-    case AType of
-      vtVoid:    Result := 'void';
-      vtInt8:    Result := 'int8';
-      vtInt16:   Result := 'int16';
-      vtInt32:   Result := 'int32';
-      vtInt64:   Result := 'int64';
-      vtUInt8:   Result := 'uint8';
-      vtUInt16:  Result := 'uint16';
-      vtUInt32:  Result := 'uint32';
-      vtUInt64:  Result := 'uint64';
-      vtFloat32: Result := 'float32';
-      vtFloat64: Result := 'float64';
-      vtPointer: Result := 'pointer';
-    else
-      Result := 'void';
-    end;
-  end;
-
 var
-  LIR: TIR;
-  LImport: TIR.TIRImport;
-  LI: Integer;
+  LSavedPath: string;
 begin
-  Result := False;
-
-  // Reset backend for clean compilation (supports recompile)
-  ResetBackend();
-  FErrors.Clear();
-
-  // Phase 1: Lex
-  if not FLexer.Tokenize(FSource, FFilename) then
-    Exit;
-
-  // Phase 2: Parse
-  if not FParser.Parse(FLexer.Tokens) then
-    Exit;
-
-  // Pre-register imported functions (from API/host) as known externals
-  LIR := FBackend.GetIR();
-  for LI := 0 to LIR.GetImportCount() - 1 do
-  begin
-    LImport := LIR.GetImport(LI);
-    FSemantics.RegisterExtern(LImport.FuncName,
-      Length(LImport.ParamTypes), ValueTypeToStr(LImport.ReturnType));
+  // Convenience wrapper — temporarily set the full output path, compile, restore
+  LSavedPath := FOutputPath;
+  FOutputPath := AOutputPath;
+  try
+    Result := Compile();
+  finally
+    FOutputPath := LSavedPath;
   end;
-
-  // Phase 3: Semantic analysis
-  if not FSemantics.Analyze(FParser.Nodes, FParser.Root) then
-    Exit;
-
-  // Apply optimization level
-  FBackend.SetOptimizationLevel(Ord(FOptimizationLevel));
-
-  // Phase 4: Emit to backend
-  if not FEmitter.Emit(FParser.Nodes, FParser.Root, FBackend, FSemantics) then
-    Exit;
-
-  // Phase 5: Build .lib file
-  FBackend.TargetLib(AOutputPath);
-  Result := FBackend.Build(False);
 end;
 
 function TGanymede.GetCompiled(): Boolean;
@@ -586,27 +613,27 @@ begin
     Exit;
 
   case AReturn of
-    vtFloat32:
+    gvtFloat32:
     begin
       LFloat := FJIT.InvokeFloat(AName, AArgs);
       Result.AsFloat32 := Single(LFloat);
     end;
 
-    vtFloat64:
+    gvtFloat64:
       Result.AsFloat64 := FJIT.InvokeFloat(AName, AArgs);
 
   else
     LInt := FJIT.Invoke(AName, AArgs);
     case AReturn of
-      vtInt8:    Result.AsInt8 := Int8(LInt);
-      vtInt16:   Result.AsInt16 := Int16(LInt);
-      vtInt32:   Result.AsInt32 := Int32(LInt);
-      vtInt64:   Result.AsInt64 := LInt;
-      vtUInt8:   Result.AsUInt8 := UInt8(LInt);
-      vtUInt16:  Result.AsUInt16 := UInt16(LInt);
-      vtUInt32:  Result.AsUInt32 := UInt32(LInt);
-      vtUInt64:  Result.AsUInt64 := UInt64(LInt);
-      vtPointer: Result.AsPointer := Pointer(LInt);
+      gvtInt8:    Result.AsInt8 := Int8(LInt);
+      gvtInt16:   Result.AsInt16 := Int16(LInt);
+      gvtInt32:   Result.AsInt32 := Int32(LInt);
+      gvtInt64:   Result.AsInt64 := LInt;
+      gvtUInt8:   Result.AsUInt8 := UInt8(LInt);
+      gvtUInt16:  Result.AsUInt16 := UInt16(LInt);
+      gvtUInt32:  Result.AsUInt32 := UInt32(LInt);
+      gvtUInt64:  Result.AsUInt64 := UInt64(LInt);
+      gvtPointer: Result.AsPointer := Pointer(LInt);
     else
       Result.AsInt64 := LInt;
     end;
@@ -626,12 +653,75 @@ end;
 
 procedure TGanymede.SetDumpIR(const AValue: Boolean);
 begin
+  FDumpIR := AValue;
   FBackend.SetDumpIR(AValue);
 end;
 
 function TGanymede.GetSSADump(): string;
 begin
   Result := FBackend.GetSSADump();
+end;
+
+procedure TGanymede.PrintErrors();
+var
+  LItems: TList<TGnyError>;
+  LI: Integer;
+  LErr: TGnyError;
+  LColor: string;
+  LLabel: string;
+begin
+  LItems := FErrors.GetItems();
+  if LItems.Count = 0 then
+    Exit;
+
+  TGnyUtils.PrintLn('');
+  for LI := 0 to LItems.Count - 1 do
+  begin
+    LErr := LItems[LI];
+    case LErr.Severity of
+      esHint:
+      begin
+        LColor := COLOR_CYAN;
+        LLabel := 'HINT';
+      end;
+      esWarning:
+      begin
+        LColor := COLOR_YELLOW;
+        LLabel := 'WARN';
+      end;
+      esError:
+      begin
+        LColor := COLOR_RED;
+        LLabel := 'ERROR';
+      end;
+      esFatal:
+      begin
+        LColor := COLOR_MAGENTA;
+        LLabel := 'FATAL';
+      end;
+    else
+      LColor := COLOR_WHITE;
+      LLabel := '?';
+    end;
+
+    if LErr.Code <> '' then
+    begin
+      if not LErr.Range.IsEmpty() then
+        TGnyUtils.PrintLn(LColor + '[%s] %s %s: %s',
+          [LLabel, LErr.Range.ToPointString(), LErr.Code, LErr.Message])
+      else
+        TGnyUtils.PrintLn(LColor + '[%s] %s: %s',
+          [LLabel, LErr.Code, LErr.Message]);
+    end
+    else
+    begin
+      if not LErr.Range.IsEmpty() then
+        TGnyUtils.PrintLn(LColor + '[%s] %s %s',
+          [LLabel, LErr.Range.ToPointString(), LErr.Message])
+      else
+        TGnyUtils.PrintLn(LColor + '[%s] %s', [LLabel, LErr.Message]);
+    end;
+  end;
 end;
 
 

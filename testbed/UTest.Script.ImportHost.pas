@@ -79,7 +79,7 @@ const
   // Test 1: Host function with two args and return value
   CAddSource =
   '''
-  module jit test_add;
+  module mem test_add;
 
   public routine main(): int64;
   begin
@@ -92,7 +92,7 @@ const
   // Test 2: Nested host calls
   CNestedSource =
   '''
-  module jit test_nested;
+  module mem test_nested;
 
   public routine main(): int64;
   begin
@@ -105,7 +105,7 @@ const
   // Test 3: Host function with no args/return (side effect)
   CCounterSource =
   '''
-  module jit test_counter;
+  module mem test_counter;
 
   public routine main(): int64;
   begin
@@ -124,7 +124,7 @@ begin
   LScript := TGanymede.Create();
   try
     LScript.ImportHost('host_add', @host_add,
-      [vtInt64, vtInt64], vtInt64);
+      [gvtInt64, gvtInt64], gvtInt64);
     LScript.LoadFromString(CAddSource, 'test_add.pxs');
 
     if not LScript.Compile() then
@@ -135,7 +135,7 @@ begin
     else
     begin
       Check(True, 'Compiled successfully');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 30, 'host_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
@@ -147,11 +147,11 @@ begin
   LScript := TGanymede.Create();
   try
     LScript.ImportHost('host_add', @host_add,
-      [vtInt64, vtInt64], vtInt64);
+      [gvtInt64, gvtInt64], gvtInt64);
     LScript.ImportHost('host_mul', @host_mul,
-      [vtInt64, vtInt64], vtInt64);
+      [gvtInt64, gvtInt64], gvtInt64);
     LScript.ImportHost('host_negate', @host_negate,
-      [vtInt64], vtInt64);
+      [gvtInt64], gvtInt64);
     LScript.LoadFromString(CNestedSource, 'test_nested.pxs');
 
     if not LScript.Compile() then
@@ -162,7 +162,7 @@ begin
     else
     begin
       Check(True, 'Compiled successfully');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 7, 'host_add(host_mul(3,4), host_negate(5)) = %d (expected 7)',
         [LResult]);
     end;
@@ -178,7 +178,7 @@ begin
     LScript.ImportHost('host_increment_counter',
       @host_increment_counter, []);
     LScript.ImportHost('host_get_counter',
-      @host_get_counter, [], vtInt64);
+      @host_get_counter, [], gvtInt64);
     LScript.LoadFromString(CCounterSource, 'test_counter.pxs');
 
     if not LScript.Compile() then
@@ -189,7 +189,7 @@ begin
     else
     begin
       Check(True, 'Compiled successfully');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 3, 'Counter after 3 increments = %d (expected 3)', [LResult]);
     end;
   finally
@@ -201,12 +201,12 @@ begin
   LScript := TGanymede.Create();
   try
     LScript.ImportHost('host_add', @host_add,
-      [vtInt64, vtInt64], vtInt64);
+      [gvtInt64, gvtInt64], gvtInt64);
 
     // First compile: 10 + 20 = 30
     LScript.LoadFromString(
       '''
-      module jit test_recomp1;
+      module mem test_recomp1;
       public routine main(): int64;
       begin
         return host_add(10, 20);
@@ -222,14 +222,14 @@ begin
     else
     begin
       Check(True, 'First compile OK');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 30, 'First: host_add(10, 20) = %d (expected 30)', [LResult]);
     end;
 
     // Second compile: 100 + 200 = 300
     LScript.LoadFromString(
       '''
-      module jit test_recomp2;
+      module mem test_recomp2;
       public routine main(): int64;
       begin
         return host_add(100, 200);
@@ -245,7 +245,7 @@ begin
     else
     begin
       Check(True, 'Recompile OK');
-      LResult := LScript.Invoke('main', [], vtInt64).AsInt64;
+      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
       Check(LResult = 300, 'Recompile: host_add(100, 200) = %d (expected 300)', [LResult]);
     end;
   finally

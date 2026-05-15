@@ -70,7 +70,7 @@ type
     tkVarArgs,
 
     // Keywords — Contextual (module kind)
-    tkExe, tkDll, tkLib, tkJit,
+    tkExe, tkDll, tkLib, tkMem,
 
     // Built-in type keywords
     tkInt8, tkInt16, tkInt32, tkInt64,
@@ -344,7 +344,7 @@ begin
   FKeywords.Add('exe', tkExe);
   FKeywords.Add('dll', tkDll);
   FKeywords.Add('lib', tkLib);
-  FKeywords.Add('jit', tkJit);
+  FKeywords.Add('mem', tkMem);
 
   // Built-in type keywords
   FKeywords.Add('int8', tkInt8);

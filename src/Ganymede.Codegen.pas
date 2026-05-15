@@ -76,7 +76,7 @@ type
     FCompileImportHandles: TArray<TImportHandle>;
     FCompileStringHandles: TArray<TDataHandle>;
     FCompileGlobalHandles: TArray<TDataHandle>;
-    FCompileImportParamTypes: TArray<TArray<TValueType>>;
+    FCompileImportParamTypes: TArray<TArray<TGnyValueType>>;
     FCompilePublicGlobals: TList<TPair<Integer, string>>;  // .data offset -> ExportName
 
     function GeneratePE(const AJITData: PJITCodeGenData = nil): TBytes;
@@ -725,7 +725,7 @@ var
 
   LI, LJ, LK: Integer;
   LFunc: TFuncInfo;
-  LParamTypes: TArray<TValueType>;
+  LParamTypes: TArray<TGnyValueType>;
   LInstr: TInstruction;
   LEntry: TImportEntry;
 
@@ -1797,7 +1797,7 @@ var
     if (not LNeedsAddress) and (AOp.Kind = okLocal) and (not AOp.LocalHandle.IsParam) then
     begin
       LLocalInfo := LFunc.Locals[AOp.LocalHandle.Index];
-      if (LLocalInfo.LocalType = vtVoid) and (LLocalInfo.LocalSize > 8) then
+      if (LLocalInfo.LocalType = gvtVoid) and (LLocalInfo.LocalSize > 8) then
         LNeedsAddress := True;
     end;
     
@@ -2303,12 +2303,12 @@ begin
               for LK := 4 to High(LInstr.Args) do
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > LK) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] in [gvtFloat32, gvtFloat64]) then
                 begin
                   // Float stack arg: load to RAX, MOVQ→XMM0, CVTSD2SS, MOVSS to stack
                   LoadOperandToReg(LInstr.Args[LK], REG_RAX);
                   EmitMovqXmmReg(REG_XMM0, REG_RAX);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] = gvtFloat32 then
                   begin
                     // CVTSD2SS XMM0, XMM0
                     EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($C0);
@@ -2331,11 +2331,11 @@ begin
               if Length(LInstr.Args) > 0 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 0) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToReg(LInstr.Args[0], REG_RAX);
                   EmitMovqXmmReg(REG_XMM0, REG_RAX);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($C0); end;
                 end
                 else
@@ -2344,11 +2344,11 @@ begin
               if Length(LInstr.Args) > 1 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 1) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToReg(LInstr.Args[1], REG_RAX);
                   EmitMovqXmmReg(REG_XMM1, REG_RAX);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($C9); end;
                 end
                 else
@@ -2357,11 +2357,11 @@ begin
               if Length(LInstr.Args) > 2 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 2) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToReg(LInstr.Args[2], REG_RAX);
                   EmitMovqXmmReg(REG_XMM2, REG_RAX);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($D2); end;
                 end
                 else
@@ -2370,11 +2370,11 @@ begin
               if Length(LInstr.Args) > 3 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 3) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToReg(LInstr.Args[3], REG_RAX);
                   EmitMovqXmmReg(REG_XMM3, REG_RAX);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($DB); end;
                 end
                 else
@@ -2386,17 +2386,17 @@ begin
               EmitCallIndirectRipRel(0);  // Placeholder
 
               // Sign-extend 32-bit return values to 64-bit
-              if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = vtInt32 then
+              if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = gvtInt32 then
                 EmitMovsxdRaxEax();
 
               // Store return value to temp if this instruction has a dest
               // Win64 ABI: floats return in XMM0, integers in RAX
               if LInstr.Dest.IsValid() then
               begin
-                if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType in [vtFloat32, vtFloat64] then
+                if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType in [gvtFloat32, gvtFloat64] then
                 begin
                   // Float32 returns need promotion to float64 for VM slots
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = gvtFloat32 then
                   begin
                     // CVTSS2SD XMM0, XMM0 — promote single to double
                     EmitByte($F3); EmitByte($0F); EmitByte($5A); EmitByte($C0);
@@ -2435,7 +2435,7 @@ begin
               // Win64 ABI: floats return in XMM0, integers in RAX
               if LInstr.Dest.IsValid() then
               begin
-                if FCode.GetFunc(LInstr.FuncTarget.Index).ReturnType in [vtFloat32, vtFloat64] then
+                if FCode.GetFunc(LInstr.FuncTarget.Index).ReturnType in [gvtFloat32, gvtFloat64] then
                   StoreTempFromXmm(LInstr.Dest.Index, REG_XMM0)
                 else
                   StoreTempFromReg(LInstr.Dest.Index, REG_RAX);
@@ -3005,7 +3005,7 @@ begin
               begin
                 // Small return value: load into appropriate register
                 // Win64 ABI: floats return in XMM0, integers in RAX
-                if LFunc.ReturnType in [vtFloat32, vtFloat64] then
+                if LFunc.ReturnType in [gvtFloat32, gvtFloat64] then
                   LoadOperandToXmm(LInstr.Op1, REG_XMM0)
                 else
                   LoadOperandToReg(LInstr.Op1, REG_RAX);
@@ -4381,7 +4381,7 @@ var
   // Function tracking
   LI, LJ, LK: Integer;
   LFunc: TFuncInfo;
-  LParamTypes: TArray<TValueType>;
+  LParamTypes: TArray<TGnyValueType>;
   LInstr: TInstruction;
   LEntry: TImportEntry;
 
@@ -5142,7 +5142,7 @@ var
     if (not LNeedsAddress) and (AOp.Kind = okLocal) and (not AOp.LocalHandle.IsParam) then
     begin
       LLocalInfo := LFunc.Locals[AOp.LocalHandle.Index];
-      if (LLocalInfo.LocalType = vtVoid) and (LLocalInfo.LocalSize > 8) then
+      if (LLocalInfo.LocalType = gvtVoid) and (LLocalInfo.LocalSize > 8) then
         LNeedsAddress := True;
     end;
     
@@ -5566,12 +5566,12 @@ begin
               for LK := 4 to High(LInstr.Args) do
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > LK) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] in [gvtFloat32, gvtFloat64]) then
                 begin
                   // Float stack arg: load to RAX, MOVQ→XMM0, CVTSD2SS, MOVSS to stack
                   LoadOperandToReg(LInstr.Args[LK], REG_RAX);
                   EmitMovqXmmReg(REG_XMM0, REG_RAX);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[LK] = gvtFloat32 then
                   begin
                     // CVTSD2SS XMM0, XMM0
                     EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($C0);
@@ -5593,10 +5593,10 @@ begin
               if Length(LInstr.Args) > 0 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 0) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToXmm(LInstr.Args[0], REG_XMM0);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[0] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($C0); end; // CVTSD2SS XMM0,XMM0
                 end
                 else
@@ -5605,10 +5605,10 @@ begin
               if Length(LInstr.Args) > 1 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 1) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToXmm(LInstr.Args[1], REG_XMM1);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[1] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($C9); end; // CVTSD2SS XMM1,XMM1
                 end
                 else
@@ -5617,10 +5617,10 @@ begin
               if Length(LInstr.Args) > 2 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 2) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToXmm(LInstr.Args[2], REG_XMM2);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[2] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($D2); end; // CVTSD2SS XMM2,XMM2
                 end
                 else
@@ -5629,10 +5629,10 @@ begin
               if Length(LInstr.Args) > 3 then
               begin
                 if (Length(FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes) > 3) and
-                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] in [vtFloat32, vtFloat64]) then
+                   (FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] in [gvtFloat32, gvtFloat64]) then
                 begin
                   LoadOperandToXmm(LInstr.Args[3], REG_XMM3);
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ParamTypes[3] = gvtFloat32 then
                   begin EmitByte($F2); EmitByte($0F); EmitByte($5A); EmitByte($DB); end; // CVTSD2SS XMM3,XMM3
                 end
                 else
@@ -5648,16 +5648,16 @@ begin
               EmitCallRel32(0);  // Placeholder -- linker resolves
 
               // Sign-extend 32-bit return values to 64-bit
-              if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = vtInt32 then
+              if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = gvtInt32 then
                 EmitMovsxdRaxEax();
 
               // Win64 ABI: floats return in XMM0, integers in RAX
               if LInstr.Dest.IsValid() then
               begin
-                if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType in [vtFloat32, vtFloat64] then
+                if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType in [gvtFloat32, gvtFloat64] then
                 begin
                   // Float32 returns need promotion to float64 for VM slots
-                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = vtFloat32 then
+                  if FImports.GetEntryByIndex(LInstr.ImportTarget.Index).ReturnType = gvtFloat32 then
                   begin
                     // CVTSS2SD XMM0, XMM0 — promote single to double
                     EmitByte($F3); EmitByte($0F); EmitByte($5A); EmitByte($C0);
@@ -6163,7 +6163,7 @@ begin
               begin
                 // Small return value: load into appropriate register
                 // Win64 ABI: floats return in XMM0, integers in RAX
-                if LFunc.ReturnType in [vtFloat32, vtFloat64] then
+                if LFunc.ReturnType in [gvtFloat32, gvtFloat64] then
                   LoadOperandToXmm(LInstr.Op1, REG_XMM0)
                 else
                   LoadOperandToReg(LInstr.Op1, REG_RAX);
@@ -6720,7 +6720,7 @@ var
   LObjData: TBytes;
   LOutput: TMemoryStream;
   LFunc: TFuncInfo;
-  LParamTypes: TArray<TValueType>;
+  LParamTypes: TArray<TGnyValueType>;
   LExportName: string;
   LSymbolNames: TStringList;
   LI, LJ: Integer;
@@ -7410,10 +7410,10 @@ begin
     else
     begin
       case AIR.GetGlobal(LI).GlobalType of
-        vtInt8, vtUInt8:   LSize := 1;
-        vtInt16, vtUInt16: LSize := 2;
-        vtInt32, vtUInt32, vtFloat32: LSize := 4;
-        vtInt64, vtUInt64, vtFloat64, vtPointer: LSize := 8;
+        gvtInt8, gvtUInt8:   LSize := 1;
+        gvtInt16, gvtUInt16: LSize := 2;
+        gvtInt32, gvtUInt32, gvtFloat32: LSize := 4;
+        gvtInt64, gvtUInt64, gvtFloat64, gvtPointer: LSize := 8;
       else
         LSize := 8;
       end;
@@ -7662,7 +7662,7 @@ begin
        (not LLocalHandle.IsParam) then
     begin
       LLocalInfo := LFuncInfo.Locals[LLocalHandle.Index];
-      if (LLocalInfo.LocalType = vtVoid) and (LLocalInfo.LocalSize > 8) then
+      if (LLocalInfo.LocalType = gvtVoid) and (LLocalInfo.LocalSize > 8) then
       begin
         // Large struct local - return local operand for LEA in backend
         LArgs[LI] := TOperand.FromLocal(LLocalHandle);
@@ -7718,7 +7718,7 @@ begin
        (not LLocalHandle.IsParam) then
     begin
       LLocalInfo := LFuncInfo.Locals[LLocalHandle.Index];
-      if (LLocalInfo.LocalType = vtVoid) and (LLocalInfo.LocalSize > 8) then
+      if (LLocalInfo.LocalType = gvtVoid) and (LLocalInfo.LocalSize > 8) then
       begin
         // Large struct local - return local operand for LEA in backend
         LArgs[LI] := TOperand.FromLocal(LLocalHandle);
@@ -7830,7 +7830,7 @@ var
   LVarParamIdx: Integer;
   LVarLocalIdx: Integer;
   LVarOffset: Integer;
-  LVarType: TValueType;
+  LVarType: TGnyValueType;
   // Syscall argument array
 begin
   Status('SSA: Emitting to backend (%d functions)', [ASSA.GetFunctionCount()]);
@@ -7922,7 +7922,7 @@ begin
             if LLocal.LocalTypeRef.IsPrimitive then
               LVarType := LLocal.LocalTypeRef.Primitive
             else
-              LVarType := vtPointer;
+              LVarType := gvtPointer;
 
             FSourceMap.AddVariable(LI, LLocal.LocalName, LVarType,
               vlkStack, LVarOffset, 0, True, 0, 0);
@@ -7944,7 +7944,7 @@ begin
             if LLocal.LocalTypeRef.IsPrimitive then
               LVarType := LLocal.LocalTypeRef.Primitive
             else
-              LVarType := vtPointer;
+              LVarType := gvtPointer;
 
             FSourceMap.AddVariable(LI, LLocal.LocalName, LVarType,
               vlkStack, -LVarOffset, 0, False, 0, 0);

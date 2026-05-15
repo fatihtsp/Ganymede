@@ -57,7 +57,7 @@ type
   //============================================================================
   TVariableLocation = record
     VarName: string;
-    VarType: TValueType;
+    VarType: TGnyValueType;
     LocationKind: TVariableLocationKind;
     StackOffset: Integer;       // For vlkStack: offset from RBP (negative)
     RegisterIndex: Byte;        // For vlkRegister: x64 register index
@@ -99,7 +99,7 @@ type
     procedure UpdateFunctionEnd(const AIndex: Integer; const AEndOffset: Cardinal);
     procedure Sort();
     procedure AddVariable(const AFuncIndex: Integer; const AVarName: string;
-      const AVarType: TValueType; const ALocationKind: TVariableLocationKind;
+      const AVarType: TGnyValueType; const ALocationKind: TVariableLocationKind;
       const AStackOffset: Integer; const ARegisterIndex: Byte;
       const AIsParam: Boolean; const AStartOffset: Cardinal;
       const AEndOffset: Cardinal);
@@ -323,7 +323,7 @@ begin
 end;
 
 procedure TSourceMap.AddVariable(const AFuncIndex: Integer; const AVarName: string;
-  const AVarType: TValueType; const ALocationKind: TVariableLocationKind;
+  const AVarType: TGnyValueType; const ALocationKind: TVariableLocationKind;
   const AStackOffset: Integer; const ARegisterIndex: Byte;
   const AIsParam: Boolean; const AStartOffset: Cardinal;
   const AEndOffset: Cardinal);
@@ -861,7 +861,7 @@ begin
       raise Exception.CreateFmt('Invalid .vdbg file: variable entry %d truncated', [LI]);
 
     LVar.VarName := ReadVDBGString(LStringTable, LVarEntry.NameIndex);
-    LVar.VarType := TValueType(LVarEntry.VarType);
+    LVar.VarType := TGnyValueType(LVarEntry.VarType);
     LVar.LocationKind := TVariableLocationKind(LVarEntry.LocationKind);
     LVar.RegisterIndex := LVarEntry.RegisterIndex;
     LVar.IsParam := (LVarEntry.IsParam <> 0);

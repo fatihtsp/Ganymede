@@ -75,13 +75,13 @@ type
     destructor Destroy(); override;
 
     function Add(const ADllName, AFuncName: string): TImportHandle; overload;
-    function Add(const ADllName, AFuncName: string; const AReturnType: TValueType): TImportHandle; overload;
-    function Add(const ADllName, AFuncName: string; const AReturnType: TValueType;
+    function Add(const ADllName, AFuncName: string; const AReturnType: TGnyValueType): TImportHandle; overload;
+    function Add(const ADllName, AFuncName: string; const AReturnType: TGnyValueType;
       const AIsStatic: Boolean;
       const AHostAddr: Pointer = nil): TImportHandle; overload;
-    function Add(const ADllName, AFuncName: string; const AReturnType: TValueType;
+    function Add(const ADllName, AFuncName: string; const AReturnType: TGnyValueType;
       const AIsStatic: Boolean; const ALinkage: TLinkage;
-      const AParamTypes: TArray<TValueType>;
+      const AParamTypes: TArray<TGnyValueType>;
       const AHostAddr: Pointer = nil): TImportHandle; overload;
 
     procedure Clear();
@@ -146,17 +146,17 @@ type
       const AIsPublic: Boolean = False;
       const ALinkage: TLinkage = plDefault
     ): TCodeBuilder;
-    function SetReturnType(const AType: TValueType): TCodeBuilder; overload;
-    function SetReturnType(const AType: TValueType; const ASize: Integer; const AAlignment: Integer): TCodeBuilder; overload;
+    function SetReturnType(const AType: TGnyValueType): TCodeBuilder; overload;
+    function SetReturnType(const AType: TGnyValueType; const ASize: Integer; const AAlignment: Integer): TCodeBuilder; overload;
     function SetIsVariadic(const AValue: Boolean): TCodeBuilder;
     function EndProc(): TCodeBuilder;
 
     //--------------------------------------------------------------------------
     // Parameters and Locals
     //--------------------------------------------------------------------------
-    function AddParam(const AName: string; const AType: TValueType; const AIsByRef: Boolean = False): TLocalHandle; overload;
+    function AddParam(const AName: string; const AType: TGnyValueType; const AIsByRef: Boolean = False): TLocalHandle; overload;
     function AddParam(const AName: string; const ASize: Integer; const AAlignment: Integer; const AIsByRef: Boolean = False): TLocalHandle; overload;
-    function AddLocal(const AName: string; const AType: TValueType): TLocalHandle; overload;
+    function AddLocal(const AName: string; const AType: TGnyValueType): TLocalHandle; overload;
     function AddLocal(const AName: string; const ASize: Integer): TLocalHandle; overload;
     function AddLocal(const AName: string; const ASize: Integer; const AAlignment: Integer): TLocalHandle; overload;
 
@@ -272,7 +272,7 @@ type
     // Variadic Intrinsics
     //--------------------------------------------------------------------------
     function VaCount(): TTempHandle;
-    function VaArgAt(const AIndex: TOperand; const AType: TValueType): TTempHandle;
+    function VaArgAt(const AIndex: TOperand; const AType: TGnyValueType): TTempHandle;
 
     //--------------------------------------------------------------------------
     // Memory Operations
@@ -344,7 +344,7 @@ var
 begin
   LEntry.Offset := FData.Size;
   LEntry.Size := Length(AValue) + 1;
-  LEntry.DataType := vtPointer;
+  LEntry.DataType := gvtPointer;
 
   if Length(AValue) > 0 then
     FData.WriteBuffer(AValue[1], Length(AValue));
@@ -362,7 +362,7 @@ var
 begin
   LEntry.Offset := FData.Size;
   LEntry.Size := (Length(AValue) + 1) * 2;
-  LEntry.DataType := vtPointer;
+  LEntry.DataType := gvtPointer;
 
   for LI := 1 to Length(AValue) do
   begin
@@ -382,7 +382,7 @@ var
 begin
   LEntry.Offset := FData.Size;
   LEntry.Size := Length(AData);
-  LEntry.DataType := vtPointer;
+  LEntry.DataType := gvtPointer;
 
   if Length(AData) > 0 then
     FData.WriteBuffer(AData[0], Length(AData));
@@ -397,7 +397,7 @@ var
 begin
   LEntry.Offset := FData.Size;
   LEntry.Size := 1;
-  LEntry.DataType := vtInt8;
+  LEntry.DataType := gvtInt8;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -411,7 +411,7 @@ begin
   Align(2);
   LEntry.Offset := FData.Size;
   LEntry.Size := 2;
-  LEntry.DataType := vtInt16;
+  LEntry.DataType := gvtInt16;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -425,7 +425,7 @@ begin
   Align(4);
   LEntry.Offset := FData.Size;
   LEntry.Size := 4;
-  LEntry.DataType := vtInt32;
+  LEntry.DataType := gvtInt32;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -439,7 +439,7 @@ begin
   Align(8);
   LEntry.Offset := FData.Size;
   LEntry.Size := 8;
-  LEntry.DataType := vtInt64;
+  LEntry.DataType := gvtInt64;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -452,7 +452,7 @@ var
 begin
   LEntry.Offset := FData.Size;
   LEntry.Size := 1;
-  LEntry.DataType := vtUInt8;
+  LEntry.DataType := gvtUInt8;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -466,7 +466,7 @@ begin
   Align(2);
   LEntry.Offset := FData.Size;
   LEntry.Size := 2;
-  LEntry.DataType := vtUInt16;
+  LEntry.DataType := gvtUInt16;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -480,7 +480,7 @@ begin
   Align(4);
   LEntry.Offset := FData.Size;
   LEntry.Size := 4;
-  LEntry.DataType := vtUInt32;
+  LEntry.DataType := gvtUInt32;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -494,7 +494,7 @@ begin
   Align(8);
   LEntry.Offset := FData.Size;
   LEntry.Size := 8;
-  LEntry.DataType := vtUInt64;
+  LEntry.DataType := gvtUInt64;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -508,7 +508,7 @@ begin
   Align(4);
   LEntry.Offset := FData.Size;
   LEntry.Size := 4;
-  LEntry.DataType := vtFloat32;
+  LEntry.DataType := gvtFloat32;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -522,7 +522,7 @@ begin
   Align(8);
   LEntry.Offset := FData.Size;
   LEntry.Size := 8;
-  LEntry.DataType := vtFloat64;
+  LEntry.DataType := gvtFloat64;
   FData.WriteData(AValue);
 
   Result.Index := FEntries.Count;
@@ -538,7 +538,7 @@ begin
   Align(8);
   LEntry.Offset := FData.Size;
   LEntry.Size := 8;
-  LEntry.DataType := vtPointer;
+  LEntry.DataType := gvtPointer;
 
   // Store the offset for now - will be fixed up during build
   LTargetEntry := GetEntry(ATarget);
@@ -559,7 +559,7 @@ begin
 
   LEntry.Offset := FData.Size;
   LEntry.Size := ASize;
-  LEntry.DataType := vtPointer;
+  LEntry.DataType := gvtPointer;
 
   for LI := 1 to ASize do
     FData.WriteData(Byte(0));
@@ -599,7 +599,7 @@ begin
   begin
     Result.Offset := 0;
     Result.Size := 0;
-    Result.DataType := vtVoid;
+    Result.DataType := gvtVoid;
   end;
 end;
 
@@ -643,16 +643,16 @@ end;
 
 function TImportBuilder.Add(const ADllName, AFuncName: string): TImportHandle;
 begin
-  Result := Add(ADllName, AFuncName, vtVoid);
+  Result := Add(ADllName, AFuncName, gvtVoid);
 end;
 
-function TImportBuilder.Add(const ADllName, AFuncName: string; const AReturnType: TValueType): TImportHandle;
+function TImportBuilder.Add(const ADllName, AFuncName: string; const AReturnType: TGnyValueType): TImportHandle;
 begin
   Result := Add(ADllName, AFuncName, AReturnType, False);
 end;
 
 function TImportBuilder.Add(const ADllName, AFuncName: string;
-  const AReturnType: TValueType; const AIsStatic: Boolean;
+  const AReturnType: TGnyValueType; const AIsStatic: Boolean;
   const AHostAddr: Pointer): TImportHandle;
 var
   LEntry: TImportEntry;
@@ -669,8 +669,8 @@ begin
 end;
 
 function TImportBuilder.Add(const ADllName, AFuncName: string;
-  const AReturnType: TValueType; const AIsStatic: Boolean;
-  const ALinkage: TLinkage; const AParamTypes: TArray<TValueType>;
+  const AReturnType: TGnyValueType; const AIsStatic: Boolean;
+  const ALinkage: TLinkage; const AParamTypes: TArray<TGnyValueType>;
   const AHostAddr: Pointer): TImportHandle;
 var
   LEntry: TImportEntry;
@@ -702,7 +702,7 @@ begin
     Result.DllName := '';
     Result.FuncName := '';
     Result.IATOffset := 0;
-    Result.ReturnType := vtVoid;
+    Result.ReturnType := gvtVoid;
   end;
 end;
 
@@ -872,7 +872,7 @@ begin
   LFunc.IsDllEntry := AIsDllEntry;
   LFunc.IsPublic := AIsPublic;
   LFunc.Linkage := ALinkage;
-  LFunc.ReturnType := vtVoid;
+  LFunc.ReturnType := gvtVoid;
   LFunc.TempCount := 0;
 
   FCurrentFunc := FFunctions.Count;
@@ -881,7 +881,7 @@ begin
   Result := Self;
 end;
 
-function TCodeBuilder.SetReturnType(const AType: TValueType): TCodeBuilder;
+function TCodeBuilder.SetReturnType(const AType: TGnyValueType): TCodeBuilder;
 var
   LFunc: TFuncInfo;
 begin
@@ -893,7 +893,7 @@ begin
   Result := Self;
 end;
 
-function TCodeBuilder.SetReturnType(const AType: TValueType;
+function TCodeBuilder.SetReturnType(const AType: TGnyValueType;
   const ASize: Integer; const AAlignment: Integer): TCodeBuilder;
 var
   LFunc: TFuncInfo;
@@ -940,7 +940,7 @@ begin
   Result := Self;
 end;
 
-function TCodeBuilder.AddParam(const AName: string; const AType: TValueType; const AIsByRef: Boolean): TLocalHandle;
+function TCodeBuilder.AddParam(const AName: string; const AType: TGnyValueType; const AIsByRef: Boolean): TLocalHandle;
 var
   LFunc: TFuncInfo;
   LParam: TParamInfo;
@@ -971,7 +971,7 @@ begin
   LFunc := GetCurrentFunc();
 
   LParam.ParamName := AName;
-  LParam.ParamType := vtVoid;  // Composite type - no primitive type
+  LParam.ParamType := gvtVoid;  // Composite type - no primitive type
   LParam.ParamSize := ASize;
   LParam.ParamAlignment := AAlignment;
   LParam.IsByRef := AIsByRef;
@@ -986,7 +986,7 @@ begin
   Result.IsParam := True;
 end;
 
-function TCodeBuilder.AddLocal(const AName: string; const AType: TValueType): TLocalHandle;
+function TCodeBuilder.AddLocal(const AName: string; const AType: TGnyValueType): TLocalHandle;
 var
   LFunc: TFuncInfo;
   LLocal: TLocalInfo;
@@ -997,10 +997,10 @@ begin
 
   // Calculate size based on type
   case AType of
-    vtInt8, vtUInt8: LSize := 1;
-    vtInt16, vtUInt16: LSize := 2;
-    vtInt32, vtUInt32, vtFloat32: LSize := 4;
-    vtInt64, vtUInt64, vtFloat64, vtPointer: LSize := 8;
+    gvtInt8, gvtUInt8: LSize := 1;
+    gvtInt16, gvtUInt16: LSize := 2;
+    gvtInt32, gvtUInt32, gvtFloat32: LSize := 4;
+    gvtInt64, gvtUInt64, gvtFloat64, gvtPointer: LSize := 8;
   else
     LSize := 8;  // Default to 8 bytes
   end;
@@ -1037,7 +1037,7 @@ begin
   LAlignedSize := ((ASize + 7) div 8) * 8;
 
   LLocal.LocalName := AName;
-  LLocal.LocalType := vtVoid;  // Composite type
+  LLocal.LocalType := gvtVoid;  // Composite type
   LLocal.LocalSize := LAlignedSize;
   LLocal.LocalAlignment := 8;  // Default alignment for composite types
   LLocal.StackOffset := 0;  // Will be calculated during code generation
@@ -1065,7 +1065,7 @@ begin
   LAlignedSize := ((ASize + 7) div 8) * 8;
 
   LLocal.LocalName := AName;
-  LLocal.LocalType := vtVoid;  // Composite type
+  LLocal.LocalType := gvtVoid;  // Composite type
   LLocal.LocalSize := LAlignedSize;
   LLocal.LocalAlignment := AAlignment;
   LLocal.StackOffset := 0;  // Will be calculated during code generation
@@ -1860,7 +1860,7 @@ begin
   AddInstr(LInstr);
 end;
 
-function TCodeBuilder.VaArgAt(const AIndex: TOperand; const AType: TValueType): TTempHandle;
+function TCodeBuilder.VaArgAt(const AIndex: TOperand; const AType: TGnyValueType): TTempHandle;
 var
   LInstr: TInstruction;
 begin

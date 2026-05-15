@@ -85,35 +85,35 @@ end;
 function TGnyScriptEmitter.ResolveValueType(const ATypeName: string): TGnyValueType;
 begin
   if ATypeName = 'int8' then
-    Result := vtInt8
+    Result := gvtInt8
   else if ATypeName = 'int16' then
-    Result := vtInt16
+    Result := gvtInt16
   else if ATypeName = 'int32' then
-    Result := vtInt32
+    Result := gvtInt32
   else if ATypeName = 'int64' then
-    Result := vtInt64
+    Result := gvtInt64
   else if ATypeName = 'uint8' then
-    Result := vtUInt8
+    Result := gvtUInt8
   else if ATypeName = 'uint16' then
-    Result := vtUInt16
+    Result := gvtUInt16
   else if ATypeName = 'uint32' then
-    Result := vtUInt32
+    Result := gvtUInt32
   else if ATypeName = 'uint64' then
-    Result := vtUInt64
+    Result := gvtUInt64
   else if ATypeName = 'float32' then
-    Result := vtFloat32
+    Result := gvtFloat32
   else if ATypeName = 'float64' then
-    Result := vtFloat64
+    Result := gvtFloat64
   else if ATypeName = 'boolean' then
-    Result := vtInt8  // boolean maps to int8 (0/1); backend Bool() creates these
+    Result := gvtInt8  // boolean maps to int8 (0/1); backend Bool() creates these
   else if ATypeName = 'string' then
-    Result := vtPointer  // managed UTF-8 string (pointer to TStringRec)
+    Result := gvtPointer  // managed UTF-8 string (pointer to TStringRec)
   else if ATypeName = 'wstring' then
-    Result := vtPointer  // managed UTF-16 string (raw wchar_t pointer)
+    Result := gvtPointer  // managed UTF-16 string (raw wchar_t pointer)
   else if ATypeName = 'pointer' then
-    Result := vtPointer
+    Result := gvtPointer
   else
-    Result := vtVoid;
+    Result := gvtVoid;
 end;
 
 //------------------------------------------------------------------------------
@@ -181,7 +181,7 @@ begin
   if LNode.Extra <> '' then
     LRetType := ResolveValueType(LNode.Extra)
   else
-    LRetType := vtVoid;
+    LRetType := gvtVoid;
 
   // Begin function definition
   FBackend.Func(LNode.Text, LRetType, False, plDefault, LNode.IsPublic);
@@ -275,7 +275,7 @@ begin
         for LI := 0 to High(LArgs) do
         begin
           if (LI < Length(LParamTypes)) and
-             (LParamTypes[LI] in [vtFloat32, vtFloat64]) and
+             (LParamTypes[LI] in [gvtFloat32, gvtFloat64]) and
              (FNodes[LNode.Children[LI + 1]].Kind = nkIntLit) then
             LArgs[LI] := FBackend.IntToFloat64(LArgs[LI]);
         end;
@@ -353,7 +353,7 @@ begin
   LToExpr := EmitExpr(LNode.Children[1]);
 
   // Declare the for loop variable (int32)
-  FBackend.VarDecl(LNode.Text, vtInt32);
+  FBackend.VarDecl(LNode.Text, gvtInt32);
 
   if LNode.Extra = 'downto' then
     FBackend.CountDown(LNode.Text, LFromExpr, LToExpr)
@@ -618,7 +618,7 @@ begin
         // Assign from expression (concat, func call) — own new, release old.
         // Must capture old pointer in a temp BEFORE Let, because Get(varname)
         // resolves to the SSA version current at that instruction.
-        FBackend.VarDecl(Format('__t%d', [FTempIndex]), vtPointer);
+        FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
         FBackend.Let(Format('__t%d', [FTempIndex]), FBackend.Get(LLhsNode.Text));
         LRhsExpr := EmitExpr(LNode.Children[1]);
         FBackend.Let(LLhsNode.Text, LRhsExpr);
@@ -634,7 +634,7 @@ begin
       // creates a new version, Get would return the new value, not the old.
       if LRhsNode.Kind = nkStringLit then
       begin
-        FBackend.VarDecl(Format('__t%d', [FTempIndex]), vtPointer);
+        FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
         FBackend.Let(Format('__t%d', [FTempIndex]), FBackend.Invoke('Gny_StrFromLiteral',
           [FBackend.Str(LRhsNode.Text),
            FBackend.Int64(Length(LRhsNode.Text))]));
@@ -645,7 +645,7 @@ begin
         LRhsExpr := EmitExpr(LNode.Children[1]);
 
       // Capture old string pointer in a temp before Let overwrites the version
-      FBackend.VarDecl(Format('__t%d', [FTempIndex]), vtPointer);
+      FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
       FBackend.Let(Format('__t%d', [FTempIndex]), FBackend.Get(LLhsNode.Text));
 
       LConcatExpr := FBackend.Invoke('Gny_StrConcat',
@@ -856,21 +856,21 @@ begin
           // named temps so everything executes eagerly before releases.
           if FNodes[LNode.Children[0]].Kind = nkStringLit then
           begin
-            FBackend.VarDecl(Format('__t%d', [FTempIndex]), vtPointer);
+            FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
             FBackend.Let(Format('__t%d', [FTempIndex]), LLeft);
             LLeft := FBackend.Get(Format('__t%d', [FTempIndex]));
             Inc(FTempIndex);
           end;
           if FNodes[LNode.Children[1]].Kind = nkStringLit then
           begin
-            FBackend.VarDecl(Format('__t%d', [FTempIndex]), vtPointer);
+            FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
             FBackend.Let(Format('__t%d', [FTempIndex]), LRight);
             LRight := FBackend.Get(Format('__t%d', [FTempIndex]));
             Inc(FTempIndex);
           end;
 
           // Materialize comparison result so StrCompare executes before releases
-          FBackend.VarDecl(Format('__t%d', [FTempIndex]), vtInt8);
+          FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtInt8);
           if LNode.Text = '=' then
             FBackend.Let(Format('__t%d', [FTempIndex]), FBackend.Eq(
               FBackend.Invoke('Gny_StrCompare', [LLeft, LRight]),

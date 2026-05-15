@@ -35,7 +35,7 @@ uses
 const
   CVarAssignSource =
   '''
-  module jit vartest;
+  module mem vartest;
 
   public routine compute(x: int32): int32;
   var
@@ -91,17 +91,17 @@ begin
 
       Check(True, 'Compiled successfully (opt %d)', [LOrd]);
 
-      LResult := LScript.Invoke('compute', [5], vtInt64).AsInt64;
+      LResult := LScript.Invoke('compute', [5], gvtInt64).AsInt64;
       Check(LResult = 29, 'compute(5) = %d (expected 29, opt %d)', [LResult, LOrd]);
 
       LCompute := LScript.GetSymbol('compute');
       LResult := LCompute(5);
       Check(LResult = 29, 'direct compute(5) = %d (expected 29, opt %d)', [LResult, LOrd]);
 
-      LResult := LScript.Invoke('compute', [0], vtInt64).AsInt64;
+      LResult := LScript.Invoke('compute', [0], gvtInt64).AsInt64;
       Check(LResult = 19, 'compute(0) = %d (expected 19, opt %d)', [LResult, LOrd]);
 
-      LResult := LScript.Invoke('compute', [-3], vtInt64).AsInt64;
+      LResult := LScript.Invoke('compute', [-3], gvtInt64).AsInt64;
       Check(LResult = 13, 'compute(-3) = %d (expected 13, opt %d)', [LResult, LOrd]);
     finally
       LScript.Free();
