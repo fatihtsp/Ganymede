@@ -1,0 +1,1177 @@
+﻿{===============================================================================
+  Ganymede™ - Embeddable Native Scripting Engine
+
+  Copyright © 2026-present tinyBigGAMES™ LLC
+  All Rights Reserved.
+
+  See LICENSE for license information
+===============================================================================}
+
+unit Ganymede.Parser;
+
+{$I Ganymede.Defines.inc}
+
+interface
+
+uses
+  System.SysUtils,
+  System.TypInfo,
+  System.Generics.Collections,
+  Ganymede.Utils,
+  Ganymede.Resources,
+  Ganymede.Lexer;
+
+type
+  { TGnyScriptNodeKind — full set, only fib-relevant ones implemented now }
+  TGnyScriptNodeKind = (
+    // Program structure
+    nkProgram,
+    nkModule,
+
+    // Declarations
+    nkImport, nkExported,
+    nkConstBlock, nkConstDecl,
+    nkTypeBlock, nkTypeDecl,
+    nkVarBlock, nkVarDecl,
+    nkRoutineDecl, nkMethodDecl, nkParamDecl, nkExternalDecl,
+    nkRecordType, nkObjectType, nkOverlayType, nkFieldDecl,
+    nkArrayType, nkPointerType, nkSetType, nkChoicesType, nkRoutineType,
+
+    // Statements
+    nkBlock, nkAssign, nkCall,
+    nkIf, nkWhile, nkFor, nkRepeat, nkMatch, nkMatchArm,
+    nkReturn, nkLeave, nkSkip, nkGuard,
+    nkRaise, nkCreate, nkDestroy,
+    nkGetMem, nkFreeMem, nkResizeMem, nkSetLength,
+    nkWrite, nkWriteLn,
+
+    // Expressions
+    nkIntLit, nkFloatLit, nkStringLit, nkWStringLit,
+    nkBoolLit, nkNilLit,
+    nkIdent, nkSelf, nkParent, nkVarArgs,
+    nkBinary, nkUnary, nkGrouped,
+    nkFieldAccess, nkArrayIndex, nkDeref, nkAddressOf,
+    nkFuncCall, nkTypeCast,
+    nkSetLiteral, nkRecordLiteral, nkFieldInit,
+
+    // Intrinsics
+    nkLen, nkSize, nkUtf8, nkParamCount, nkParamStr,
+
+    // Directives
+    nkDirective
+  );
+
+  { TGnyScriptNode }
+  TGnyScriptNode = record
+    Kind: TGnyScriptNodeKind;
+    Text: string;              // primary: name, literal value, operator
+    Extra: string;             // secondary: type name, return type
+    IsPublic: Boolean;         // declared with 'public' modifier
+    Children: TArray<Integer>; // child node indices into flat array
+    Range: TGnySourceRange;
+  end;
+
+  { TGnyScriptParser }
+  TGnyScriptParser = class(TGnyBaseObject)
+  private
+    // Token stream
+    FTokens: TList<TGnyScriptToken>;
+    FPos: Integer;
+
+    // AST node storage (flat array)
+    FNodes: TList<TGnyScriptNode>;
+    FRoot: Integer;
+
+    // Token stream helpers
+    function Peek(): TGnyScriptToken;
+    function PeekKind(): TGnyScriptTokenKind;
+    function AtEnd(): Boolean;
+    function Advance(): TGnyScriptToken;
+    function Match(const AKind: TGnyScriptTokenKind): Boolean;
+    function Expect(const AKind: TGnyScriptTokenKind): TGnyScriptToken;
+
+    // Node creation
+    function AddNode(const AKind: TGnyScriptNodeKind;
+      const ARange: TGnySourceRange): Integer;
+    procedure AddChild(const AParent, AChild: Integer);
+
+    // Parsers — module structure
+    function ParseModule(): Integer;
+    function ParseRoutineDecl(): Integer;
+    function ParseParamList(): TArray<Integer>;
+    function ParseTypeExpr(): string;
+    function ParseBlock(): Integer;
+
+    // Parsers — statements
+    function ParseStatement(): Integer;
+    function ParseIfStatement(): Integer;
+    function ParseWhileStatement(): Integer;
+    function ParseForStatement(): Integer;
+    function ParseRepeatStatement(): Integer;
+    function ParseReturnStatement(): Integer;
+    function ParseLeaveStatement(): Integer;
+    function ParseSkipStatement(): Integer;
+    function ParseWriteStatement(): Integer;
+    function ParseVarBlock(const AParentNode: Integer): Integer;
+    function ParseConstBlock(const AParentNode: Integer): Integer;
+    function TryParseAssign(const ALhs: Integer): Integer;
+
+    // Parsers — expressions (Pratt)
+    function ParseExpression(const AMinBP: Integer = 0): Integer;
+    function GetInfixBP(const AKind: TGnyScriptTokenKind): Integer;
+
+  public
+    constructor Create(); override;
+    destructor Destroy(); override;
+
+    // Main entry point — parses token list, returns True if no errors
+    function Parse(const ATokens: TList<TGnyScriptToken>): Boolean;
+
+    // AST access
+    function GetNodeCount(): Integer;
+    function GetNode(const AIndex: Integer): TGnyScriptNode;
+    function GetRoot(): Integer;
+    property Nodes: TList<TGnyScriptNode> read FNodes;
+    property Root: Integer read FRoot;
+  end;
+
+const
+  //--------------------------------------------------------------------------
+  // Script Parser Error Codes
+  //--------------------------------------------------------------------------
+  GNY_ERROR_SCRIPT_EXPECTED_TOKEN  = 'SP0001';
+  GNY_ERROR_SCRIPT_UNEXPECTED      = 'SP0002';
+
+  //--------------------------------------------------------------------------
+  // Pratt binding powers (higher = tighter)
+  //--------------------------------------------------------------------------
+  BP_NONE        = 0;
+  BP_COMPARE     = 2;   // = <> < > <= >= in
+  BP_ADDITIVE    = 4;   // + - or xor
+  BP_MULTIPLY    = 6;   // * / div mod and shl shr
+  BP_UNARY       = 9;   // not - + (prefix)
+  BP_POSTFIX     = 10;  // call, field, index, deref
+
+implementation
+
+{ TGnyScriptParser }
+
+constructor TGnyScriptParser.Create();
+begin
+  inherited Create();
+  try
+    FNodes := TList<TGnyScriptNode>.Create();
+  except
+    on E: Exception do
+    begin
+      FErrors.Add(esFatal, '', RSFatalInternalError, [E.Message]);
+      Exit;
+    end;
+  end;
+  FRoot := -1;
+end;
+
+destructor TGnyScriptParser.Destroy();
+begin
+  FNodes.Free();
+  inherited Destroy();
+end;
+
+//------------------------------------------------------------------------------
+// Token stream helpers
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.Peek(): TGnyScriptToken;
+begin
+  if FPos < FTokens.Count then
+    Result := FTokens[FPos]
+  else
+    Result := FTokens[FTokens.Count - 1]; // EOF token
+end;
+
+function TGnyScriptParser.PeekKind(): TGnyScriptTokenKind;
+begin
+  Result := Peek().Kind;
+end;
+
+function TGnyScriptParser.AtEnd(): Boolean;
+begin
+  Result := PeekKind() = tkEOF;
+end;
+
+function TGnyScriptParser.Advance(): TGnyScriptToken;
+begin
+  Result := Peek();
+  if FPos < FTokens.Count then
+    Inc(FPos);
+end;
+
+function TGnyScriptParser.Match(const AKind: TGnyScriptTokenKind): Boolean;
+begin
+  if PeekKind() = AKind then
+  begin
+    Advance();
+    Result := True;
+  end
+  else
+    Result := False;
+end;
+
+function TGnyScriptParser.Expect(const AKind: TGnyScriptTokenKind): TGnyScriptToken;
+var
+  LTok: TGnyScriptToken;
+begin
+  LTok := Peek();
+  if LTok.Kind = AKind then
+    Result := Advance()
+  else
+  begin
+    FErrors.Add(LTok.Range, esError, GNY_ERROR_SCRIPT_EXPECTED_TOKEN,
+      RSScriptExpected, [GetEnumName(TypeInfo(TGnyScriptTokenKind),
+      Ord(AKind)), LTok.Text]);
+    Result := LTok;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// Node creation
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.AddNode(const AKind: TGnyScriptNodeKind;
+  const ARange: TGnySourceRange): Integer;
+var
+  LNode: TGnyScriptNode;
+begin
+  LNode := Default(TGnyScriptNode);
+  LNode.Kind := AKind;
+  LNode.Range := ARange;
+  Result := FNodes.Count;
+  FNodes.Add(LNode);
+end;
+
+procedure TGnyScriptParser.AddChild(const AParent, AChild: Integer);
+var
+  LNode: TGnyScriptNode;
+  LLen: Integer;
+begin
+  LNode := FNodes[AParent];
+  LLen := Length(LNode.Children);
+  SetLength(LNode.Children, LLen + 1);
+  LNode.Children[LLen] := AChild;
+  FNodes[AParent] := LNode;
+end;
+
+//------------------------------------------------------------------------------
+// Main entry point
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.Parse(const ATokens: TList<TGnyScriptToken>): Boolean;
+begin
+  FTokens := ATokens;
+  FPos := 0;
+  FNodes.Clear();
+  FRoot := -1;
+
+  Status(RSParserStatusStart, [FTokens.Count]);
+
+  FRoot := ParseModule();
+
+  Status(RSParserStatusComplete, [FNodes.Count, FErrors.ErrorCount()]);
+
+  Result := FErrors.ErrorCount() = 0;
+end;
+
+//------------------------------------------------------------------------------
+// Module parsing
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseModule(): Integer;
+var
+  LModTok: TGnyScriptToken;
+  LKindTok: TGnyScriptToken;
+  LNameTok: TGnyScriptToken;
+  LModNode: Integer;
+  LDeclNode: Integer;
+  LBlockNode: Integer;
+  LNode: TGnyScriptNode;
+  LIsPublic: Boolean;
+begin
+  // module ModuleKind ident ;
+  LModTok := Expect(tkModule);
+  LModNode := AddNode(nkModule, LModTok.Range);
+
+  // Module kind: exe | dll | lib | unit | jit
+  LKindTok := Advance();
+  LNode := FNodes[LModNode];
+  LNode.Extra := LKindTok.Text; // store module kind
+  FNodes[LModNode] := LNode;
+
+  // Module name
+  LNameTok := Expect(tkIdent);
+  LNode := FNodes[LModNode];
+  LNode.Text := LNameTok.Text; // store module name
+  FNodes[LModNode] := LNode;
+
+  Expect(tkSemicolon);
+
+  // Parse declarations until we hit 'begin' or 'end'
+  while (not AtEnd()) and (PeekKind() <> tkBegin) and (PeekKind() <> tkEnd) do
+  begin
+    // Check for 'public' modifier
+    LIsPublic := PeekKind() = tkPublic;
+    if LIsPublic then
+      Advance();
+
+    if PeekKind() = tkRoutine then
+    begin
+      LDeclNode := ParseRoutineDecl();
+      if (LDeclNode >= 0) and LIsPublic then
+      begin
+        LNode := FNodes[LDeclNode];
+        LNode.IsPublic := True;
+        FNodes[LDeclNode] := LNode;
+      end;
+      if LDeclNode >= 0 then
+        AddChild(LModNode, LDeclNode);
+    end
+    else if PeekKind() = tkVar then
+    begin
+      ParseVarBlock(LModNode);
+    end
+    else if PeekKind() = tkConst then
+    begin
+      ParseConstBlock(LModNode);
+    end
+    else
+    begin
+      FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
+        RSScriptUnexpectedToken, [Peek().Text]);
+      Advance(); // skip to recover
+    end;
+  end;
+
+  // Optional module body: begin ... end
+  if PeekKind() = tkBegin then
+  begin
+    LBlockNode := ParseBlock();
+    if LBlockNode >= 0 then
+      AddChild(LModNode, LBlockNode);
+  end;
+
+  // end .
+  Expect(tkEnd);
+  Match(tkDot);
+
+  Result := LModNode;
+end;
+
+//------------------------------------------------------------------------------
+// Routine parsing
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseRoutineDecl(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LRoutNode: Integer;
+  LNode: TGnyScriptNode;
+  LParams: TArray<Integer>;
+  LBlockNode: Integer;
+  LI: Integer;
+begin
+  // routine ident ( params ) [ : ReturnType ] ;
+  LTok := Expect(tkRoutine);
+  LRoutNode := AddNode(nkRoutineDecl, LTok.Range);
+
+  // Routine name
+  LTok := Expect(tkIdent);
+  LNode := FNodes[LRoutNode];
+  LNode.Text := LTok.Text;
+  FNodes[LRoutNode] := LNode;
+
+  // Optional parameter list
+  if PeekKind() = tkLParen then
+  begin
+    LParams := ParseParamList();
+    for LI := 0 to Length(LParams) - 1 do
+      AddChild(LRoutNode, LParams[LI]);
+  end;
+
+  // Optional return type
+  if Match(tkColon) then
+  begin
+    LNode := FNodes[LRoutNode];
+    LNode.Extra := ParseTypeExpr();
+    FNodes[LRoutNode] := LNode;
+  end;
+
+  Expect(tkSemicolon);
+
+  // Optional var/const blocks before begin (interleaved, any order)
+  while (not AtEnd()) and ((PeekKind() = tkVar) or (PeekKind() = tkConst)) do
+  begin
+    if PeekKind() = tkVar then
+      ParseVarBlock(LRoutNode)
+    else
+      ParseConstBlock(LRoutNode);
+  end;
+
+  // Routine body: begin ... end ;
+  if PeekKind() = tkBegin then
+  begin
+    LBlockNode := ParseBlock();
+    if LBlockNode >= 0 then
+      AddChild(LRoutNode, LBlockNode);
+  end;
+
+  Result := LRoutNode;
+end;
+
+function TGnyScriptParser.ParseParamList(): TArray<Integer>;
+var
+  LParamNode: Integer;
+  LNode: TGnyScriptNode;
+  LNameTok: TGnyScriptToken;
+begin
+  Result := nil;
+  Expect(tkLParen);
+
+  while (not AtEnd()) and (PeekKind() <> tkRParen) do
+  begin
+    // paramName : TypeExpr
+    LNameTok := Expect(tkIdent);
+    LParamNode := AddNode(nkParamDecl, LNameTok.Range);
+    LNode := FNodes[LParamNode];
+    LNode.Text := LNameTok.Text;
+    FNodes[LParamNode] := LNode;
+
+    Expect(tkColon);
+
+    LNode := FNodes[LParamNode];
+    LNode.Extra := ParseTypeExpr();
+    FNodes[LParamNode] := LNode;
+
+    // Add to result array
+    SetLength(Result, Length(Result) + 1);
+    Result[Length(Result) - 1] := LParamNode;
+
+    // Separator
+    if PeekKind() = tkSemicolon then
+      Advance()
+    else if PeekKind() <> tkRParen then
+    begin
+      FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_EXPECTED_TOKEN,
+        RSScriptExpected, [''')'' or '';''', Peek().Text]);
+      Break;
+    end;
+  end;
+
+  Expect(tkRParen);
+end;
+
+function TGnyScriptParser.ParseTypeExpr(): string;
+var
+  LTok: TGnyScriptToken;
+begin
+  // For the vertical slice: just consume an identifier as type name
+  LTok := Advance();
+  Result := LTok.Text;
+end;
+
+//------------------------------------------------------------------------------
+// Block and statement parsing
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseBlock(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LBlockNode: Integer;
+  LStmtNode: Integer;
+begin
+  LTok := Expect(tkBegin);
+  LBlockNode := AddNode(nkBlock, LTok.Range);
+
+  while (not AtEnd()) and (PeekKind() <> tkEnd) do
+  begin
+    // Skip stray semicolons
+    if PeekKind() = tkSemicolon then
+    begin
+      Advance();
+      Continue;
+    end;
+
+    LStmtNode := ParseStatement();
+    if LStmtNode >= 0 then
+      AddChild(LBlockNode, LStmtNode)
+    else
+      Break;
+  end;
+
+  Expect(tkEnd);
+  Match(tkSemicolon); // optional trailing semicolon
+
+  Result := LBlockNode;
+end;
+
+function TGnyScriptParser.ParseStatement(): Integer;
+var
+  LExprNode: Integer;
+  LAssignNode: Integer;
+begin
+  if PeekKind() = tkIf then
+    Result := ParseIfStatement()
+  else if PeekKind() = tkWhile then
+    Result := ParseWhileStatement()
+  else if PeekKind() = tkFor then
+    Result := ParseForStatement()
+  else if PeekKind() = tkRepeat then
+    Result := ParseRepeatStatement()
+  else if PeekKind() = tkReturn then
+    Result := ParseReturnStatement()
+  else if PeekKind() = tkLeave then
+    Result := ParseLeaveStatement()
+  else if PeekKind() = tkSkip then
+    Result := ParseSkipStatement()
+  else if (PeekKind() = tkWrite) or (PeekKind() = tkWriteLn) then
+    Result := ParseWriteStatement()
+  else
+  begin
+    // Expression — then check for assignment operator
+    LExprNode := ParseExpression();
+    LAssignNode := TryParseAssign(LExprNode);
+    if LAssignNode >= 0 then
+      Result := LAssignNode
+    else
+      Result := LExprNode;
+    Match(tkSemicolon);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// If statement: if expr then stmts [else stmts] end ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseIfStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LIfNode: Integer;
+  LCondNode: Integer;
+  LThenBlock: Integer;
+  LElseBlock: Integer;
+  LStmtNode: Integer;
+begin
+  LTok := Expect(tkIf);
+  LIfNode := AddNode(nkIf, LTok.Range);
+
+  // Condition expression
+  LCondNode := ParseExpression();
+  AddChild(LIfNode, LCondNode);
+
+  Expect(tkThen);
+
+  // Then block — parse statements inline until end/else
+  LThenBlock := AddNode(nkBlock, Peek().Range);
+  while (not AtEnd()) and (PeekKind() <> tkEnd) and (PeekKind() <> tkElse) do
+  begin
+    if PeekKind() = tkSemicolon then
+    begin
+      Advance();
+      Continue;
+    end;
+    LStmtNode := ParseStatement();
+    if LStmtNode >= 0 then
+      AddChild(LThenBlock, LStmtNode)
+    else
+      Break;
+  end;
+  AddChild(LIfNode, LThenBlock);
+
+  // Optional else block
+  if PeekKind() = tkElse then
+  begin
+    Advance(); // consume else
+    LElseBlock := AddNode(nkBlock, Peek().Range);
+    while (not AtEnd()) and (PeekKind() <> tkEnd) do
+    begin
+      if PeekKind() = tkSemicolon then
+      begin
+        Advance();
+        Continue;
+      end;
+      LStmtNode := ParseStatement();
+      if LStmtNode >= 0 then
+        AddChild(LElseBlock, LStmtNode)
+      else
+        Break;
+    end;
+    AddChild(LIfNode, LElseBlock);
+  end;
+
+  Expect(tkEnd);
+  Match(tkSemicolon);
+
+  Result := LIfNode;
+end;
+
+//------------------------------------------------------------------------------
+// While statement: while expr do stmts end ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseWhileStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LWhileNode: Integer;
+  LCondNode: Integer;
+  LBodyBlock: Integer;
+  LStmtNode: Integer;
+begin
+  LTok := Expect(tkWhile);
+  LWhileNode := AddNode(nkWhile, LTok.Range);
+
+  // Condition expression
+  LCondNode := ParseExpression();
+  AddChild(LWhileNode, LCondNode);
+
+  Expect(tkDo);
+
+  // Body block — parse statements until end
+  LBodyBlock := AddNode(nkBlock, Peek().Range);
+  while (not AtEnd()) and (PeekKind() <> tkEnd) do
+  begin
+    if PeekKind() = tkSemicolon then
+    begin
+      Advance();
+      Continue;
+    end;
+    LStmtNode := ParseStatement();
+    if LStmtNode >= 0 then
+      AddChild(LBodyBlock, LStmtNode)
+    else
+      Break;
+  end;
+  AddChild(LWhileNode, LBodyBlock);
+
+  Expect(tkEnd);
+  Match(tkSemicolon);
+
+  Result := LWhileNode;
+end;
+
+//------------------------------------------------------------------------------
+// For statement: for ident := expr (to|downto) expr do stmts end ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseForStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LVarTok: TGnyScriptToken;
+  LForNode: Integer;
+  LFromNode: Integer;
+  LToNode: Integer;
+  LBodyBlock: Integer;
+  LStmtNode: Integer;
+begin
+  LTok := Expect(tkFor);
+  LForNode := AddNode(nkFor, LTok.Range);
+
+  // Loop variable name
+  LVarTok := Expect(tkIdent);
+  FNodes.List[LForNode].Text := LVarTok.Text;
+
+  // :=
+  Expect(tkAssign);
+
+  // From expression
+  LFromNode := ParseExpression();
+  AddChild(LForNode, LFromNode);
+
+  // Direction: to or downto
+  if PeekKind() = tkTo then
+  begin
+    Advance();
+    FNodes.List[LForNode].Extra := 'to';
+  end
+  else if PeekKind() = tkDownto then
+  begin
+    Advance();
+    FNodes.List[LForNode].Extra := 'downto';
+  end
+  else
+  begin
+    FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_EXPECTED_TOKEN,
+      RSScriptExpected, ['to or downto', Peek().Text]);
+    Exit(-1);
+  end;
+
+  // To expression
+  LToNode := ParseExpression();
+  AddChild(LForNode, LToNode);
+
+  Expect(tkDo);
+
+  // Body block
+  LBodyBlock := AddNode(nkBlock, Peek().Range);
+  while (not AtEnd()) and (PeekKind() <> tkEnd) do
+  begin
+    if PeekKind() = tkSemicolon then
+    begin
+      Advance();
+      Continue;
+    end;
+    LStmtNode := ParseStatement();
+    if LStmtNode >= 0 then
+      AddChild(LBodyBlock, LStmtNode)
+    else
+      Break;
+  end;
+  AddChild(LForNode, LBodyBlock);
+
+  Expect(tkEnd);
+  Match(tkSemicolon);
+
+  Result := LForNode;
+end;
+
+//------------------------------------------------------------------------------
+// Repeat statement: repeat stmts until expr ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseRepeatStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LRepeatNode: Integer;
+  LBodyBlock: Integer;
+  LCondNode: Integer;
+  LStmtNode: Integer;
+begin
+  LTok := Expect(tkRepeat);
+  LRepeatNode := AddNode(nkRepeat, LTok.Range);
+
+  // Body block — parse statements until 'until'
+  LBodyBlock := AddNode(nkBlock, Peek().Range);
+  while (not AtEnd()) and (PeekKind() <> tkUntil) do
+  begin
+    if PeekKind() = tkSemicolon then
+    begin
+      Advance();
+      Continue;
+    end;
+    LStmtNode := ParseStatement();
+    if LStmtNode >= 0 then
+      AddChild(LBodyBlock, LStmtNode)
+    else
+      Break;
+  end;
+  AddChild(LRepeatNode, LBodyBlock);
+
+  Expect(tkUntil);
+
+  // Until condition
+  LCondNode := ParseExpression();
+  AddChild(LRepeatNode, LCondNode);
+
+  Match(tkSemicolon);
+
+  Result := LRepeatNode;
+end;
+
+//------------------------------------------------------------------------------
+// Leave statement (break): leave ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseLeaveStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+begin
+  LTok := Expect(tkLeave);
+  Result := AddNode(nkLeave, LTok.Range);
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
+// Skip statement (continue): skip ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseSkipStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+begin
+  LTok := Expect(tkSkip);
+  Result := AddNode(nkSkip, LTok.Range);
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
+// Write/WriteLn statement: write(expr, ...) ; | writeln(expr, ...) ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseWriteStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LNodeKind: TGnyScriptNodeKind;
+  LArgNode: Integer;
+begin
+  LTok := Advance();
+  if LTok.Kind = tkWriteLn then
+    LNodeKind := nkWriteLn
+  else
+    LNodeKind := nkWrite;
+
+  Result := AddNode(LNodeKind, LTok.Range);
+
+  // Parentheses required per BNF: write/writeln "(" [ ArgList ] ")"
+  Expect(tkLParen);
+  while (not AtEnd()) and (PeekKind() <> tkRParen) do
+  begin
+    LArgNode := ParseExpression();
+    if LArgNode >= 0 then
+      AddChild(Result, LArgNode);
+    if PeekKind() = tkComma then
+      Advance()
+    else if PeekKind() <> tkRParen then
+    begin
+      FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_EXPECTED_TOKEN,
+        RSScriptExpected, [''')'' or '',''', Peek().Text]);
+      Break;
+    end;
+  end;
+  Expect(tkRParen);
+
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
+// Return statement: return [expr] ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseReturnStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LRetNode: Integer;
+  LExprNode: Integer;
+begin
+  LTok := Expect(tkReturn);
+  LRetNode := AddNode(nkReturn, LTok.Range);
+
+  // Return value expression (if not immediately followed by ; or end)
+  if (not AtEnd()) and (PeekKind() <> tkSemicolon) and (PeekKind() <> tkEnd) then
+  begin
+    LExprNode := ParseExpression();
+    AddChild(LRetNode, LExprNode);
+  end;
+
+  Match(tkSemicolon);
+  Result := LRetNode;
+end;
+
+//------------------------------------------------------------------------------
+// Var block: var { ident : TypeExpr [ = Expression ] ; }
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseVarBlock(const AParentNode: Integer): Integer;
+var
+  LNameTok: TGnyScriptToken;
+  LVarNode: Integer;
+  LNode: TGnyScriptNode;
+  LInitNode: Integer;
+begin
+  Expect(tkVar);
+  Result := 0; // count of vars parsed
+
+  // Parse var declarations until we hit something that isn't an identifier
+  while (not AtEnd()) and (PeekKind() = tkIdent) do
+  begin
+    LNameTok := Expect(tkIdent);
+    LVarNode := AddNode(nkVarDecl, LNameTok.Range);
+    LNode := FNodes[LVarNode];
+    LNode.Text := LNameTok.Text;
+    FNodes[LVarNode] := LNode;
+
+    // : TypeExpr
+    Expect(tkColon);
+    LNode := FNodes[LVarNode];
+    LNode.Extra := ParseTypeExpr();
+    FNodes[LVarNode] := LNode;
+
+    // Optional initializer: = Expression
+    if Match(tkEq) then
+    begin
+      LInitNode := ParseExpression();
+      AddChild(LVarNode, LInitNode);
+    end;
+
+    Expect(tkSemicolon);
+    AddChild(AParentNode, LVarNode);
+    Inc(Result);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// Const block: const { ident : TypeExpr = Expression ; }
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseConstBlock(const AParentNode: Integer): Integer;
+var
+  LNameTok: TGnyScriptToken;
+  LConstNode: Integer;
+  LNode: TGnyScriptNode;
+  LInitNode: Integer;
+begin
+  Expect(tkConst);
+  Result := 0;
+
+  // Parse const declarations until we hit something that isn't an identifier
+  while (not AtEnd()) and (PeekKind() = tkIdent) do
+  begin
+    LNameTok := Expect(tkIdent);
+    LConstNode := AddNode(nkConstDecl, LNameTok.Range);
+    LNode := FNodes[LConstNode];
+    LNode.Text := LNameTok.Text;
+    FNodes[LConstNode] := LNode;
+
+    // : TypeExpr (required)
+    Expect(tkColon);
+    LNode := FNodes[LConstNode];
+    LNode.Extra := ParseTypeExpr();
+    FNodes[LConstNode] := LNode;
+
+    // = Expression (required for constants)
+    Expect(tkEq);
+    LInitNode := ParseExpression();
+    AddChild(LConstNode, LInitNode);
+
+    Expect(tkSemicolon);
+    AddChild(AParentNode, LConstNode);
+    Inc(Result);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// Assignment: Designator ( := | += | -= | *= | /= ) Expression
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.TryParseAssign(const ALhs: Integer): Integer;
+var
+  LTok: TGnyScriptToken;
+  LAssignNode: Integer;
+  LNode: TGnyScriptNode;
+  LRhsNode: Integer;
+begin
+  Result := -1;
+
+  // Check for assignment operator
+  if (PeekKind() <> tkAssign) and (PeekKind() <> tkPlusAssign) and
+     (PeekKind() <> tkMinusAssign) and (PeekKind() <> tkMulAssign) and
+     (PeekKind() <> tkDivAssign) then
+    Exit;
+
+  LTok := Advance(); // consume the assignment operator
+  LAssignNode := AddNode(nkAssign, LTok.Range);
+  LNode := FNodes[LAssignNode];
+  LNode.Text := LTok.Text; // ':=', '+=', '-=', '*=', '/='
+  FNodes[LAssignNode] := LNode;
+
+  // child[0] = LHS (already parsed), child[1] = RHS
+  AddChild(LAssignNode, ALhs);
+  LRhsNode := ParseExpression();
+  AddChild(LAssignNode, LRhsNode);
+
+  Result := LAssignNode;
+end;
+
+//------------------------------------------------------------------------------
+// Pratt expression parser
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.GetInfixBP(const AKind: TGnyScriptTokenKind): Integer;
+begin
+  // Return LEFT binding power for infix operators
+  if (AKind = tkEq) or (AKind = tkNotEq) or (AKind = tkLt) or
+     (AKind = tkGt) or (AKind = tkLtEq) or (AKind = tkGtEq) or
+     (AKind = tkIn) then
+    Result := BP_COMPARE
+  else if (AKind = tkPlus) or (AKind = tkMinus) or
+          (AKind = tkOr) or (AKind = tkXor) or (AKind = tkCaret) then
+    Result := BP_ADDITIVE
+  else if (AKind = tkStar) or (AKind = tkSlash) or
+          (AKind = tkDiv) or (AKind = tkMod) or
+          (AKind = tkAnd) or (AKind = tkShl) or (AKind = tkShr) then
+    Result := BP_MULTIPLY
+  else if AKind = tkLParen then
+    Result := BP_POSTFIX  // function call
+  else
+    Result := BP_NONE;
+end;
+
+function TGnyScriptParser.ParseExpression(const AMinBP: Integer): Integer;
+var
+  LTok: TGnyScriptToken;
+  LLeft: Integer;
+  LRight: Integer;
+  LNode: TGnyScriptNode;
+  LOpNode: Integer;
+  LCallNode: Integer;
+  LArgNode: Integer;
+  LBP: Integer;
+begin
+  // --- NUD: prefix / atoms ---
+  LTok := Peek();
+
+  // Integer literal
+  if LTok.Kind = tkIntLit then
+  begin
+    Advance();
+    LLeft := AddNode(nkIntLit, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+  end
+
+  // Float literal
+  else if LTok.Kind = tkFloatLit then
+  begin
+    Advance();
+    LLeft := AddNode(nkFloatLit, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+  end
+
+  // Identifier
+  else if LTok.Kind = tkIdent then
+  begin
+    Advance();
+    LLeft := AddNode(nkIdent, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+  end
+
+  // String literal
+  else if LTok.Kind = tkStringLit then
+  begin
+    Advance();
+    LLeft := AddNode(nkStringLit, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+  end
+
+  // Boolean literals
+  else if LTok.Kind = tkTrue then
+  begin
+    Advance();
+    LLeft := AddNode(nkBoolLit, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := 'true';
+    FNodes[LLeft] := LNode;
+  end
+  else if LTok.Kind = tkFalse then
+  begin
+    Advance();
+    LLeft := AddNode(nkBoolLit, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := 'false';
+    FNodes[LLeft] := LNode;
+  end
+
+  // Grouped expression: ( expr )
+  else if LTok.Kind = tkLParen then
+  begin
+    Advance();
+    LLeft := ParseExpression(BP_NONE);
+    Expect(tkRParen);
+  end
+
+  // Unary minus / plus / not
+  else if (LTok.Kind = tkMinus) or (LTok.Kind = tkPlus) or
+          (LTok.Kind = tkNot) then
+  begin
+    Advance();
+    LLeft := AddNode(nkUnary, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+    LRight := ParseExpression(BP_UNARY);
+    AddChild(LLeft, LRight);
+  end
+
+  else
+  begin
+    FErrors.Add(LTok.Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
+      RSScriptExpectedExpr, [LTok.Text]);
+    Result := -1;
+    Exit;
+  end;
+
+  // --- LED: infix / postfix loop ---
+  while not AtEnd() do
+  begin
+    LTok := Peek();
+    LBP := GetInfixBP(LTok.Kind);
+
+    // Stop if this operator binds less tightly than our minimum
+    if LBP <= AMinBP then
+      Break;
+
+    // Function call: ident ( args )
+    if LTok.Kind = tkLParen then
+    begin
+      Advance(); // consume (
+      LCallNode := AddNode(nkFuncCall, LTok.Range);
+      AddChild(LCallNode, LLeft); // callee
+
+      // Parse argument list
+      if PeekKind() <> tkRParen then
+      begin
+        LArgNode := ParseExpression(BP_NONE);
+        AddChild(LCallNode, LArgNode);
+        while Match(tkComma) do
+        begin
+          LArgNode := ParseExpression(BP_NONE);
+          AddChild(LCallNode, LArgNode);
+        end;
+      end;
+
+      Expect(tkRParen);
+      LLeft := LCallNode;
+    end
+    else
+    begin
+      // Binary operator
+      Advance(); // consume operator
+      LOpNode := AddNode(nkBinary, LTok.Range);
+      LNode := FNodes[LOpNode];
+      LNode.Text := LTok.Text;
+      FNodes[LOpNode] := LNode;
+
+      // Right side — LBP+1 for left-associativity
+      LRight := ParseExpression(LBP);
+      AddChild(LOpNode, LLeft);
+      AddChild(LOpNode, LRight);
+      LLeft := LOpNode;
+    end;
+  end;
+
+  Result := LLeft;
+end;
+
+//------------------------------------------------------------------------------
+// Public accessors
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.GetNodeCount(): Integer;
+begin
+  Result := FNodes.Count;
+end;
+
+function TGnyScriptParser.GetNode(const AIndex: Integer): TGnyScriptNode;
+begin
+  Result := FNodes[AIndex];
+end;
+
+function TGnyScriptParser.GetRoot(): Integer;
+begin
+  Result := FRoot;
+end;
+
+end.
