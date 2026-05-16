@@ -522,7 +522,11 @@ type
       const AName: string;
       const AArgTypes: TArray<TTypeRef>
     ): Integer;
+    function FindImportByArgCount(const AIR: TIR; const AName: string;
+      const AArgCount: Integer): Integer;
     function FindLocalFuncByName(const AIR: TIR; const AName: string): Integer;
+    function FindLocalFuncByArgCount(const AIR: TIR; const AName: string;
+      const AArgCount: Integer): Integer;
     function FindLocalFuncBySignature(
       const AIR: TIR;
       const AName: string;
@@ -2794,7 +2798,10 @@ begin
             LInstr.CallArgs := LCallArgs;
             
             // Check if this is a local function call first
-            LFuncIdx := FindLocalFuncByName(AIR, LStmt.CallTarget);
+            // Try arg-count match for overload resolution, then name-only fallback
+            LFuncIdx := FindLocalFuncByArgCount(AIR, LStmt.CallTarget, Length(LStmt.CallArgs));
+            if LFuncIdx < 0 then
+              LFuncIdx := FindLocalFuncByName(AIR, LStmt.CallTarget);
             if LFuncIdx >= 0 then
             begin
               LInstr.CallTarget := TSSAOperand.FromFunc(LFuncIdx);
@@ -2845,7 +2852,10 @@ begin
             end
             else
             begin
-              LImportIdx := FindImportByName(AIR, LStmt.CallTarget);
+              // Try arg-count match for overloaded imports, then name-only fallback
+              LImportIdx := FindImportByArgCount(AIR, LStmt.CallTarget, Length(LStmt.CallArgs));
+              if LImportIdx < 0 then
+                LImportIdx := FindImportByName(AIR, LStmt.CallTarget);
               if LImportIdx < 0 then
               begin
                 if Assigned(FErrors) then
@@ -3791,6 +3801,22 @@ begin
   Result := -1;
 end;
 
+function TSSABuilder.FindImportByArgCount(const AIR: TIR; const AName: string;
+  const AArgCount: Integer): Integer;
+var
+  LI: Integer;
+  LImport: TIR.TIRImport;
+begin
+  for LI := 0 to AIR.GetImportCount() - 1 do
+  begin
+    LImport := AIR.GetImport(LI);
+    if SameText(LImport.FuncName, AName) and
+       (Length(LImport.ParamTypes) = AArgCount) then
+      Exit(LI);
+  end;
+  Result := -1;
+end;
+
 function TSSABuilder.FindLocalFuncByName(const AIR: TIR; const AName: string): Integer;
 var
   LI: Integer;
@@ -3800,6 +3826,29 @@ begin
   begin
     LFunc := AIR.GetFunction(LI);
     if SameText(LFunc.FuncName, AName) then
+      Exit(LI);
+  end;
+  Result := -1;
+end;
+
+function TSSABuilder.FindLocalFuncByArgCount(const AIR: TIR;
+  const AName: string; const AArgCount: Integer): Integer;
+var
+  LI: Integer;
+  LJ: Integer;
+  LFunc: TIR.TIRFunc;
+  LParamCount: Integer;
+begin
+  for LI := 0 to AIR.GetFunctionCount() - 1 do
+  begin
+    LFunc := AIR.GetFunction(LI);
+    if not SameText(LFunc.FuncName, AName) then
+      Continue;
+    LParamCount := 0;
+    for LJ := 0 to LFunc.Vars.Count - 1 do
+      if LFunc.Vars[LJ].IsParam then
+        Inc(LParamCount);
+    if LParamCount = AArgCount then
       Exit(LI);
   end;
   Result := -1;
@@ -4308,6 +4357,9 @@ begin
         // Try signature-based lookup first for overload resolution
         LFuncIndex := FindLocalFuncBySignature(AIR, LExpr.CallTarget, LArgTypes);
         if LFuncIndex < 0 then
+          // Try arg-count match (handles type widening cases like Int32→Int64)
+          LFuncIndex := FindLocalFuncByArgCount(AIR, LExpr.CallTarget, Length(LExpr.CallArgs));
+        if LFuncIndex < 0 then
           // Fall back to name-only lookup (for non-overloaded functions)
           LFuncIndex := FindLocalFuncByName(AIR, LExpr.CallTarget);
         
@@ -4363,6 +4415,9 @@ begin
         begin
           // Try signature-based import lookup first (for overloaded imports)
           LImportIdx := FindImportBySignature(AIR, LExpr.CallTarget, LArgTypes);
+          if LImportIdx < 0 then
+            // Try arg-count match (handles type widening cases like Int32→Int64)
+            LImportIdx := FindImportByArgCount(AIR, LExpr.CallTarget, Length(LExpr.CallArgs));
           if LImportIdx < 0 then
             // Fall back to name-only lookup (for non-overloaded imports)
             LImportIdx := FindImportByName(AIR, LExpr.CallTarget);
