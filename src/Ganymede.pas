@@ -95,7 +95,9 @@ type
     FDumpIR: Boolean;
     function GetCompiled(): Boolean;
     function ValueTypeToStr(const AType: TGnyValueType): string;
+    {$HINTS OFF}
     function StrToValueType(const AName: string): TGnyValueType;
+    {$HINTS ON}
     procedure ResetBackend();
     procedure ProcessImports();
 
@@ -115,7 +117,7 @@ type
     function Compile(): Boolean;
 
     // Convenience — set output path then compile (for lib/exe modules)
-    function CompileToLib(const AOutputPath: string): Boolean;
+    //function CompileToLib(const AOutputPath: string): Boolean;
 
     // Set output path for lib/exe targets (derived from filename if not set)
     function SetOutputPath(const APath: string): TGanymede;
@@ -537,7 +539,7 @@ begin
         for LK := 0 to LImportParser.Nodes.Count - 1 do
           GraftNode(LImportParser, LK, LIndexOffset);
 
-        // Collect exports and add public declarations as children of main module
+        // Collect exports and add routine declarations as children of main module
         LExportCount := 0;
         SetLength(LModuleExports, Length(LImpRootNode.Children));
 
@@ -548,28 +550,37 @@ begin
 
           if LImpChildNode.Kind <> nkRoutineDecl then
             Continue;
-          if not LImpChildNode.IsPublic then
-            Continue;
 
-          // Add grafted node as child of main module
+          // Add ALL routine declarations as children of main module
+          // (both public and private — private helpers must be compiled too)
           LGraftedIdx := LImpChildIdx + LIndexOffset;
           LRootNode := FParser.Nodes[LMainRoot];
           SetLength(LRootNode.Children, Length(LRootNode.Children) + 1);
           LRootNode.Children[Length(LRootNode.Children) - 1] := LGraftedIdx;
           FParser.Nodes[LMainRoot] := LRootNode;
 
-          // Track export for semantic module registration
+          // Track only public routines as module exports for scoped access
+          if not LImpChildNode.IsPublic then
+            Continue;
+
+          // Build signature key: "routineName(type1,type2,...)"
           LExportSym := Default(TGnyScriptSymbol);
-          LExportSym.SymbolName := LImpChildNode.Text;
           LExportSym.Kind := skRoutine;
           LExportSym.ReturnType := LImpChildNode.Extra;
           LParamCount := 0;
+          LExportSym.SymbolName := LImpChildNode.Text + '(';
           for LParamIdx := 0 to Length(LImpChildNode.Children) - 1 do
           begin
             LParamNode := LImportParser.Nodes[LImpChildNode.Children[LParamIdx]];
             if LParamNode.Kind = nkParamDecl then
+            begin
+              if LParamCount > 0 then
+                LExportSym.SymbolName := LExportSym.SymbolName + ',';
+              LExportSym.SymbolName := LExportSym.SymbolName + LParamNode.Extra;
               Inc(LParamCount);
+            end;
           end;
+          LExportSym.SymbolName := LExportSym.SymbolName + ')';
           LExportSym.ParamCount := LParamCount;
           LExportSym.NodeIndex := LGraftedIdx;
           LModuleExports[LExportCount] := LExportSym;
@@ -598,10 +609,12 @@ var
   LIR: TIR;
   LImport: TIR.TIRImport;
   LI: Integer;
+  LJ: Integer;
   LModuleKind: string;
   LOutputFile: string;
   LModuleName: string;
   LExt: string;
+  LParamTypeStrs: TArray<string>;
 begin
   Result := False;
 
@@ -630,8 +643,12 @@ begin
   for LI := 0 to LIR.GetImportCount() - 1 do
   begin
     LImport := LIR.GetImport(LI);
+    // Convert TGnyValueType array to string array for signature keys
+    SetLength(LParamTypeStrs, Length(LImport.ParamTypes));
+    for LJ := 0 to Length(LImport.ParamTypes) - 1 do
+      LParamTypeStrs[LJ] := ValueTypeToStr(LImport.ParamTypes[LJ]);
     FSemantics.RegisterExtern(LImport.FuncName,
-      Length(LImport.ParamTypes), ValueTypeToStr(LImport.ReturnType));
+      LParamTypeStrs, ValueTypeToStr(LImport.ReturnType));
   end;
 
   // Phase 3: Semantic analysis
@@ -656,7 +673,7 @@ begin
     if Result and FJIT.HasSymbol('Gny_InitConsole') then
       Invoke('Gny_InitConsole', []);
   end
-  else if (LModuleKind = 'lib') or (LModuleKind = 'exe') then
+  else if (LModuleKind = 'lib') or (LModuleKind = 'dll') then
   begin
     // Resolve output file path
     if TPath.HasExtension(FOutputPath) then
@@ -671,7 +688,7 @@ begin
       if LModuleKind = 'lib' then
         LExt := '.lib'
       else
-        LExt := '.exe';
+        LExt := '.dll';
       LOutputFile := TPath.Combine(FOutputPath, LModuleName + LExt);
     end;
 
@@ -681,7 +698,7 @@ begin
     if LModuleKind = 'lib' then
       FBackend.TargetLib(LOutputFile)
     else
-      FBackend.TargetExe(LOutputFile);
+      FBackend.TargetDll(LOutputFile);
 
     Result := FBackend.Build(False);
   end
@@ -692,6 +709,7 @@ begin
   end;
 end;
 
+(*
 function TGanymede.CompileToLib(const AOutputPath: string): Boolean;
 var
   LSavedPath: string;
@@ -705,6 +723,7 @@ begin
     FOutputPath := LSavedPath;
   end;
 end;
+*)
 
 function TGanymede.GetCompiled(): Boolean;
 begin

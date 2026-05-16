@@ -70,7 +70,7 @@ type
     tkVarArgs,
 
     // Keywords — Contextual (module kind)
-    tkExe, tkDll, tkLib, tkMem,
+    tkDll, tkLib, tkMem,
 
     // Keywords — Linkage
     tkCppLink,
@@ -344,7 +344,6 @@ begin
   FKeywords.Add('varargs', tkVarArgs);
 
   // Contextual (module kind)
-  FKeywords.Add('exe', tkExe);
   FKeywords.Add('dll', tkDll);
   FKeywords.Add('lib', tkLib);
   FKeywords.Add('mem', tkMem);

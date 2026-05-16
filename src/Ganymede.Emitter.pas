@@ -242,6 +242,10 @@ var
 begin
   LNode := FNodes[AIndex];
 
+  // DLL modules need a DllMain entry point — Windows calls it on load/unload
+  if LNode.Extra = 'dll' then
+    FBackend.DllMain();
+
   for LI := 0 to Length(LNode.Children) - 1 do
   begin
     LChild := FNodes[LNode.Children[LI]];
@@ -284,8 +288,12 @@ begin
   else
     LRetType := gvtVoid;
 
-  // Begin function definition
-  FBackend.Func(LNode.Text, LRetType, False, ResolveLinkage(AIndex), LNode.IsPublic);
+  // Begin function definition — cpplink routines use OverloadFunc to allow
+  // duplicate names with Itanium mangling; C linkage uses Func (unique names)
+  if ResolveLinkage(AIndex) = plDefault then
+    FBackend.OverloadFunc(LNode.Text, LRetType, False, LNode.IsPublic)
+  else
+    FBackend.Func(LNode.Text, LRetType, False, ResolveLinkage(AIndex), LNode.IsPublic);
   FTempIndex := 0;
 
   // Emit parameters
