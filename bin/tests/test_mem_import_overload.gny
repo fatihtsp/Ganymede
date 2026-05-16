@@ -1,0 +1,19 @@
+module mem test_mem_import_overload;
+import test_lib_overload;
+
+public routine main(): int64;
+var
+  r1: int64;
+  r2: int64;
+  r3: int64;
+begin
+  // Overload 1: compute(5) = 5 * 10 = 50
+  r1 := test_lib_overload.compute(5);
+  // Overload 2: compute(3, 4) = double_it(3) + double_it(4) = 6 + 8 = 14
+  r2 := test_lib_overload.compute(3, 4);
+  // C linkage: add(10, 20) = 30
+  r3 := test_lib_overload.add(10, 20);
+  return r1 + r2 + r3;
+end;
+
+end.

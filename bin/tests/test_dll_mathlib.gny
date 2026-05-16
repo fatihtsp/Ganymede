@@ -1,0 +1,8 @@
+module dll test_dll_mathlib;
+
+public routine lib_add(a: int64; b: int64): int64;
+begin
+  return a + b;
+end;
+
+end.

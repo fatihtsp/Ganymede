@@ -1,0 +1,11 @@
+module mem test_mem_external_dll_custom;
+
+public routine lib_add(a: int64; b: int64): int64;
+  external "test_dll_mathlib.dll";
+
+public routine main(): int64;
+begin
+  return lib_add(10, 20);
+end;
+
+end.

@@ -1,0 +1,27 @@
+module dll test_dll_overload;
+
+// Private helper — called by the two-param overload
+routine double_it(x: int64): int64;
+begin
+  return x + x;
+end;
+
+// Overload 1: single param — returns value * 10
+public routine cpplink compute(a: int64): int64;
+begin
+  return a * 10;
+end;
+
+// Overload 2: two params — returns sum via private helper
+public routine cpplink compute(a: int64; b: int64): int64;
+begin
+  return double_it(a) + double_it(b);
+end;
+
+// C linkage export — no mangling
+public routine add(a: int64; b: int64): int64;
+begin
+  return a + b;
+end;
+
+end.

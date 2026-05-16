@@ -1,0 +1,24 @@
+module mem test_mem_external_overload_lib;
+
+routine cpplink compute(a: int64): int64;
+  external "test_lib_overload.lib";
+
+routine cpplink compute(a: int64; b: int64): int64;
+  external "test_lib_overload.lib";
+
+routine add(a: int64; b: int64): int64;
+  external "test_lib_overload.lib";
+
+public routine main(): int64;
+var
+  r1: int64;
+  r2: int64;
+  r3: int64;
+begin
+  r1 := compute(5);
+  r2 := compute(3, 4);
+  r3 := add(10, 20);
+  return r1 + r2 + r3;
+end;
+
+end.

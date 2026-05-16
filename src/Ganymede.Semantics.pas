@@ -51,6 +51,8 @@ type
     destructor Destroy(); override;
     function Declare(const ASymbol: TGnyScriptSymbol): Boolean;
     function Lookup(const AName: string; var ASymbol: TGnyScriptSymbol): Boolean;
+    function FindKeysWithPrefix(const APrefix: string;
+      var AKeys: TArray<string>): Boolean;
   end;
 
   { TGnyScriptSemantics }
@@ -91,7 +93,7 @@ type
     // Pre-register an external function (e.g. host API) so the analyzer
     // accepts calls to it without a source-level declaration.
     procedure RegisterExtern(const AName: string;
-      const AParamCount: Integer; const AReturnType: string);
+      const AParamTypes: TArray<string>; const AReturnType: string);
 
     // Register an imported module with its exported symbols
     procedure RegisterModule(const AModuleName: string;
@@ -100,6 +102,10 @@ type
     // Symbol lookup for emitter
     function LookupSymbol(const AName: string;
       var ASymbol: TGnyScriptSymbol): Boolean;
+
+    // Find all symbol keys matching a prefix (for overload resolution)
+    function FindSymbolsWithPrefix(const APrefix: string;
+      var AKeys: TArray<string>): Boolean;
   end;
 
 const
@@ -140,6 +146,26 @@ function TGnyScriptScope.Lookup(const AName: string;
   var ASymbol: TGnyScriptSymbol): Boolean;
 begin
   Result := FSymbols.TryGetValue(AName, ASymbol);
+end;
+
+function TGnyScriptScope.FindKeysWithPrefix(const APrefix: string;
+  var AKeys: TArray<string>): Boolean;
+var
+  LKey: string;
+  LCount: Integer;
+begin
+  LCount := 0;
+  SetLength(AKeys, FSymbols.Count);
+  for LKey in FSymbols.Keys do
+  begin
+    if LKey.StartsWith(APrefix) then
+    begin
+      AKeys[LCount] := LKey;
+      Inc(LCount);
+    end;
+  end;
+  SetLength(AKeys, LCount);
+  Result := LCount > 0;
 end;
 
 { TGnyScriptSemantics }
@@ -215,16 +241,51 @@ begin
   Result := FindSymbol(AName, ASymbol);
 end;
 
+function TGnyScriptSemantics.FindSymbolsWithPrefix(const APrefix: string;
+  var AKeys: TArray<string>): Boolean;
+var
+  LI: Integer;
+  LJ: Integer;
+  LScopeKeys: TArray<string>;
+begin
+  AKeys := nil;
+  // Search from innermost scope outward
+  for LI := FScopes.Count - 1 downto 0 do
+  begin
+    if FScopes[LI].FindKeysWithPrefix(APrefix, LScopeKeys) then
+    begin
+      for LJ := 0 to Length(LScopeKeys) - 1 do
+      begin
+        SetLength(AKeys, Length(AKeys) + 1);
+        AKeys[Length(AKeys) - 1] := LScopeKeys[LJ];
+      end;
+    end;
+  end;
+  Result := Length(AKeys) > 0;
+end;
+
 procedure TGnyScriptSemantics.RegisterExtern(const AName: string;
-  const AParamCount: Integer; const AReturnType: string);
+  const AParamTypes: TArray<string>; const AReturnType: string);
 var
   LSym: TGnyScriptSymbol;
+  LSignature: string;
+  LI: Integer;
 begin
+  // Build signature key: "funcName(type1,type2,...)"
+  LSignature := AName + '(';
+  for LI := 0 to Length(AParamTypes) - 1 do
+  begin
+    if LI > 0 then
+      LSignature := LSignature + ',';
+    LSignature := LSignature + AParamTypes[LI];
+  end;
+  LSignature := LSignature + ')';
+
   LSym := Default(TGnyScriptSymbol);
-  LSym.SymbolName := AName;
+  LSym.SymbolName := LSignature;
   LSym.Kind := skRoutine;
   LSym.ReturnType := AReturnType;
-  LSym.ParamCount := AParamCount;
+  LSym.ParamCount := Length(AParamTypes);
   LSym.NodeIndex := -1;
 
   FExterns.Add(LSym);
@@ -257,14 +318,17 @@ function TGnyScriptSemantics.FindModuleExport(const AModuleName: string;
   const ASymbolName: string; var ASymbol: TGnyScriptSymbol): Boolean;
 var
   LExportList: TList<TGnyScriptSymbol>;
+  LPrefix: string;
   LI: Integer;
 begin
   Result := False;
   if not FModuleExports.TryGetValue(AModuleName, LExportList) then
     Exit;
+  // Match by signature prefix: "funcName(" matches "funcName(int64)" etc.
+  LPrefix := ASymbolName + '(';
   for LI := 0 to LExportList.Count - 1 do
   begin
-    if LExportList[LI].SymbolName = ASymbolName then
+    if LExportList[LI].SymbolName.StartsWith(LPrefix) then
     begin
       ASymbol := LExportList[LI];
       Result := True;
@@ -336,20 +400,32 @@ var
   LParamSym: TGnyScriptSymbol;
   LI: Integer;
   LParamCount: Integer;
+  LSignature: string;
+  LFirst: Boolean;
 begin
   LNode := FNodes[AIndex];
 
-  // Count params (children that are nkParamDecl)
+  // Build signature key: "routineName(type1,type2,...)"
+  // Each overload gets a unique key based on its parameter types
+  LSignature := LNode.Text + '(';
+  LFirst := True;
   LParamCount := 0;
   for LI := 0 to Length(LNode.Children) - 1 do
   begin
     if FNodes[LNode.Children[LI]].Kind = nkParamDecl then
+    begin
+      if not LFirst then
+        LSignature := LSignature + ',';
+      LSignature := LSignature + FNodes[LNode.Children[LI]].Extra;
+      LFirst := False;
       Inc(LParamCount);
+    end;
   end;
+  LSignature := LSignature + ')';
 
-  // Register routine in current scope
+  // Register routine in current scope with signature key
   LSym := Default(TGnyScriptSymbol);
-  LSym.SymbolName := LNode.Text;
+  LSym.SymbolName := LSignature;
   LSym.Kind := skRoutine;
   LSym.ReturnType := LNode.Extra;
   LSym.ParamCount := LParamCount;
@@ -357,7 +433,7 @@ begin
 
   if not DeclareSymbol(LSym) then
     FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_DUPLICATE,
-      RSScriptDuplicateDecl, [LNode.Text]);
+      RSScriptDuplicateDecl, [LSignature]);
 
   // Push routine scope for params and body
   PushScope();
@@ -582,6 +658,7 @@ var
   LSym: TGnyScriptSymbol;
   LLeftType: string;
   LRightType: string;
+  LKeys: TArray<string>;
 
   function IsFloatType(const AType: string): Boolean;
   begin
@@ -702,9 +779,13 @@ begin
           FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
             RSScriptUndeclaredIdent, [FNodes[LNode.Children[0]].Text + '.' + LNode.Text]);
       end
-      // Direct call: func(args)
-      else if (LNode.Kind = nkIdent) and FindSymbol(LNode.Text, LSym) then
-        Result := LSym.ReturnType
+      // Direct call: func(args) — resolve via signature prefix matching
+      else if (LNode.Kind = nkIdent) and
+              FindSymbolsWithPrefix(LNode.Text + '(', LKeys) then
+      begin
+        if FindSymbol(LKeys[0], LSym) then
+          Result := LSym.ReturnType;
+      end
       else if LNode.Kind = nkIdent then
         FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
           RSScriptUndeclaredIdent, [LNode.Text]);
