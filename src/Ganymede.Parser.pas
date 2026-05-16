@@ -109,6 +109,7 @@ type
     function ParseWhileStatement(): Integer;
     function ParseForStatement(): Integer;
     function ParseRepeatStatement(): Integer;
+    function ParseMatchStatement(): Integer;
     function ParseReturnStatement(): Integer;
     function ParseLeaveStatement(): Integer;
     function ParseSkipStatement(): Integer;
@@ -606,6 +607,8 @@ begin
     Result := ParseForStatement()
   else if PeekKind() = tkRepeat then
     Result := ParseRepeatStatement()
+  else if PeekKind() = tkMatch then
+    Result := ParseMatchStatement()
   else if PeekKind() = tkReturn then
     Result := ParseReturnStatement()
   else if PeekKind() = tkLeave then
@@ -853,6 +856,140 @@ begin
   Match(tkSemicolon);
 
   Result := LRepeatNode;
+end;
+
+//------------------------------------------------------------------------------
+// Match statement: match expr of { label {, label} : stmts } [else stmts] end ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseMatchStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LMatchNode: Integer;
+  LSelectorNode: Integer;
+  LArmNode: Integer;
+  LLabelNode: Integer;
+  LHighNode: Integer;
+  LBodyBlock: Integer;
+  LElseBlock: Integer;
+  LStmtNode: Integer;
+  LNode: TGnyScriptNode;
+begin
+  LTok := Expect(tkMatch);
+  LMatchNode := AddNode(nkMatch, LTok.Range);
+
+  // Selector expression
+  LSelectorNode := ParseExpression();
+  AddChild(LMatchNode, LSelectorNode);
+
+  Expect(tkOf);
+
+  // Parse match arms until 'else' or 'end'
+  while (not AtEnd()) and (PeekKind() <> tkElse) and (PeekKind() <> tkEnd) do
+  begin
+    // Skip stray semicolons between arms
+    if PeekKind() = tkSemicolon then
+    begin
+      Advance();
+      Continue;
+    end;
+
+    LArmNode := AddNode(nkMatchArm, Peek().Range);
+
+    // Parse comma-separated labels: expr [".." expr] { "," expr [".." expr] }
+    repeat
+      LLabelNode := ParseExpression();
+
+      // Check for range: label ".." label
+      if PeekKind() = tkRange then
+      begin
+        Advance(); // consume '..'
+        LHighNode := ParseExpression();
+
+        // Wrap as a binary ".." node with low and high children
+        LTok := Default(TGnyScriptToken);
+        LTok.Range := FNodes[LLabelNode].Range;
+        LStmtNode := AddNode(nkBinary, LTok.Range);
+        LNode := FNodes[LStmtNode];
+        LNode.Text := '..';
+        FNodes[LStmtNode] := LNode;
+        AddChild(LStmtNode, LLabelNode);
+        AddChild(LStmtNode, LHighNode);
+        AddChild(LArmNode, LStmtNode);
+      end
+      else
+        AddChild(LArmNode, LLabelNode);
+
+    until (AtEnd()) or (PeekKind() <> tkComma) or (Advance().Kind <> tkComma);
+    // Note: the Advance in the until condition consumes the comma
+
+    // Expect ':' after labels
+    Expect(tkColon);
+
+    // Parse arm body statements until next label, else, or end
+    LBodyBlock := AddNode(nkBlock, Peek().Range);
+    while (not AtEnd()) and (PeekKind() <> tkElse) and (PeekKind() <> tkEnd) do
+    begin
+      // Stop if we see what looks like the start of a new match arm:
+      // an integer/expression followed by ':' or ',' (lookahead heuristic)
+      // We detect this by checking if the current token is a potential label start
+      // and breaking to let the outer loop handle it
+      if (PeekKind() in [tkIntLit, tkIdent, tkTrue, tkFalse]) then
+      begin
+        // Peek ahead: if after an expression there's a colon, comma, or dotdot,
+        // this is likely a new arm — break out
+        // Simple heuristic: integer/ident followed by ':', ',', or '..'
+        if (FPos + 1 < FTokens.Count) and
+           (FTokens[FPos + 1].Kind in [tkColon, tkComma, tkRange]) then
+          Break;
+      end;
+
+      if PeekKind() = tkSemicolon then
+      begin
+        Advance();
+        Continue;
+      end;
+
+      LStmtNode := ParseStatement();
+      if LStmtNode >= 0 then
+        AddChild(LBodyBlock, LStmtNode)
+      else
+        Break;
+    end;
+    AddChild(LArmNode, LBodyBlock);
+
+    AddChild(LMatchNode, LArmNode);
+  end;
+
+  // Optional else block
+  if PeekKind() = tkElse then
+  begin
+    Advance(); // consume 'else'
+    LElseBlock := AddNode(nkBlock, Peek().Range);
+    while (not AtEnd()) and (PeekKind() <> tkEnd) do
+    begin
+      if PeekKind() = tkSemicolon then
+      begin
+        Advance();
+        Continue;
+      end;
+      LStmtNode := ParseStatement();
+      if LStmtNode >= 0 then
+        AddChild(LElseBlock, LStmtNode)
+      else
+        Break;
+    end;
+    // Mark the match node to indicate an else clause is present
+    LNode := FNodes[LMatchNode];
+    LNode.Extra := 'else';
+    FNodes[LMatchNode] := LNode;
+    AddChild(LMatchNode, LElseBlock);
+  end;
+
+  Expect(tkEnd);
+  Match(tkSemicolon);
+
+  Result := LMatchNode;
 end;
 
 //------------------------------------------------------------------------------

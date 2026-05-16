@@ -27,7 +27,8 @@ uses
   UTest.Script.ControlFlow,
   UTest.Script.StringIO,
   UTest.Script.ImportHost,
-  UTest.Script.ImportClause;
+  UTest.Script.ImportClause,
+  UTest.Script.MatchStmt;
 
 procedure Menu();
 var
@@ -57,7 +58,9 @@ begin
       .Add('Import Host',
         procedure begin TGnyTestCase.Run(TScriptImportHostTest) end)
       .Add('Import Clause',
-        procedure begin TGnyTestCase.Run(TScriptImportClauseTest) end);
+        procedure begin TGnyTestCase.Run(TScriptImportClauseTest) end)
+      .Add('Match Statement',
+        procedure begin TGnyTestCase.Run(TScriptMatchStmtTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

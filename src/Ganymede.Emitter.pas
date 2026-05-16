@@ -53,6 +53,7 @@ type
     procedure EmitWhile(const AIndex: Integer);
     procedure EmitFor(const AIndex: Integer);
     procedure EmitRepeat(const AIndex: Integer);
+    procedure EmitMatch(const AIndex: Integer);
     procedure EmitReturn(const AIndex: Integer);
     procedure EmitLeave();
     procedure EmitSkip();
@@ -72,6 +73,9 @@ type
       const ABackend: TGnyNativeBackend;
       const ASemantics: TGnyScriptSemantics): Boolean;
   end;
+
+const
+  GNY_ERROR_SCRIPT_EMIT_MATCH = 'SE0001';
 
 implementation
 
@@ -356,6 +360,8 @@ begin
     EmitFor(AIndex)
   else if LNode.Kind = nkRepeat then
     EmitRepeat(AIndex)
+  else if LNode.Kind = nkMatch then
+    EmitMatch(AIndex)
   else if LNode.Kind = nkReturn then
     EmitReturn(AIndex)
   else if LNode.Kind = nkLeave then
@@ -496,6 +502,101 @@ begin
   EmitBlock(LNode.Children[0]);
   LCondExpr := EmitExpr(LNode.Children[1]);
   FBackend.StopWhen(LCondExpr);
+end;
+
+procedure TGnyScriptEmitter.EmitMatch(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LArmNode: TGnyScriptNode;
+  LLabelNode: TGnyScriptNode;
+  LSelectorExpr: TGnyExpr;
+  LValues: TArray<TGnyExpr>;
+  LValueCount: Integer;
+  LLowVal: Int64;
+  LHighVal: Int64;
+  LChildIdx: Integer;
+  LI: Integer;
+  LV: Int64;
+begin
+  LNode := FNodes[AIndex];
+
+  // children[0] = selector expression
+  if Length(LNode.Children) < 1 then
+    Exit;
+
+  LSelectorExpr := EmitExpr(LNode.Children[0]);
+  FBackend.Match(LSelectorExpr);
+
+  // children[1..N] = nkMatchArm nodes, optionally last = nkBlock (else)
+  for LChildIdx := 1 to Length(LNode.Children) - 1 do
+  begin
+    LArmNode := FNodes[LNode.Children[LChildIdx]];
+
+    if LArmNode.Kind = nkMatchArm then
+    begin
+      // Collect all label values for this arm
+      // Last child of the arm is always the body block (nkBlock)
+      LValueCount := 0;
+      SetLength(LValues, 0);
+
+      for LI := 0 to Length(LArmNode.Children) - 2 do // all except last (body)
+      begin
+        LLabelNode := FNodes[LArmNode.Children[LI]];
+
+        if (LLabelNode.Kind = nkBinary) and (LLabelNode.Text = '..') then
+        begin
+          // Range label: expand low..high into discrete values
+          if Length(LLabelNode.Children) >= 2 then
+          begin
+            // Validate both endpoints are integer literals
+            if (FNodes[LLabelNode.Children[0]].Kind <> nkIntLit) or
+               (FNodes[LLabelNode.Children[1]].Kind <> nkIntLit) then
+            begin
+              FErrors.Add(LLabelNode.Range, esError, GNY_ERROR_SCRIPT_EMIT_MATCH,
+                RSScriptMatchLabelNotConst, []);
+              Exit;
+            end;
+            LLowVal := StrToInt64Def(FNodes[LLabelNode.Children[0]].Text, 0);
+            LHighVal := StrToInt64Def(FNodes[LLabelNode.Children[1]].Text, 0);
+            for LV := LLowVal to LHighVal do
+            begin
+              SetLength(LValues, LValueCount + 1);
+              LValues[LValueCount] := FBackend.Int64(LV);
+              Inc(LValueCount);
+            end;
+          end;
+        end
+        else
+        begin
+          // Single value label — must be an integer literal
+          if LLabelNode.Kind <> nkIntLit then
+          begin
+            FErrors.Add(LLabelNode.Range, esError, GNY_ERROR_SCRIPT_EMIT_MATCH,
+              RSScriptMatchLabelNotConst, []);
+            Exit;
+          end;
+          SetLength(LValues, LValueCount + 1);
+          LValues[LValueCount] := EmitExpr(LArmNode.Children[LI]);
+          Inc(LValueCount);
+        end;
+      end;
+
+      // Emit On with collected values
+      FBackend.On(LValues);
+
+      // Emit arm body (last child)
+      if Length(LArmNode.Children) > 0 then
+        EmitBlock(LArmNode.Children[Length(LArmNode.Children) - 1]);
+    end
+    else if LArmNode.Kind = nkBlock then
+    begin
+      // Else block
+      FBackend.OnElse();
+      EmitBlock(LNode.Children[LChildIdx]);
+    end;
+  end;
+
+  FBackend.EndMatch();
 end;
 
 procedure TGnyScriptEmitter.EmitLeave();

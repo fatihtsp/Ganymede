@@ -1,0 +1,16 @@
+module mem test_mem_match_bad;
+
+// This should fail: match label is a variable, not a constant
+public routine matchbad(x: int32): int32;
+var
+  y: int32;
+begin
+  y := 5;
+  match x of
+    y: return 10;
+  else
+    return -1;
+  end;
+end;
+
+end.

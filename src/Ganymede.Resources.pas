@@ -498,6 +498,7 @@ resourcestring
   // Script IR Lowering Error Messages
   //--------------------------------------------------------------------------
   RSScriptIRUnsupportedNode   = 'Unsupported AST node in IR lowering: %s';
+  RSScriptMatchLabelNotConst  = 'Match label must be a constant integer expression';
 
   //--------------------------------------------------------------------------
   // Script Optimizer Messages
