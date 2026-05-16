@@ -62,6 +62,7 @@ type
     procedure EmitVarDecl(const AIndex: Integer);
     procedure EmitConstDecl(const AIndex: Integer);
     procedure EmitAssign(const AIndex: Integer);
+    procedure EmitInlineArrayType(const ATypeName: string);
     function  EmitExpr(const AIndex: Integer): TGnyExpr;
 
   public
@@ -268,7 +269,16 @@ begin
     else if LChild.Kind = nkVarDecl then
     begin
       // Module-level variable → global
-      FBackend.Global(LChild.Text, ResolveValueType(LChild.Extra));
+      // Inline array types need auto-definition first
+      if LChild.Extra.StartsWith('array') then
+      begin
+        EmitInlineArrayType(LChild.Extra);
+        FBackend.Global(LChild.Text, LChild.Extra);
+      end
+      else if ResolveValueType(LChild.Extra) = gvtVoid then
+        FBackend.Global(LChild.Text, LChild.Extra)
+      else
+        FBackend.Global(LChild.Text, ResolveValueType(LChild.Extra));
     end
     else if LChild.Kind = nkConstDecl then
     begin
@@ -349,54 +359,141 @@ var
   LNode: TGnyScriptNode;
   LRecNode: TGnyScriptNode;
   LFieldNode: TGnyScriptNode;
+  LArrNode: TGnyScriptNode;
   LTypeName: string;
   LIsPacked: Boolean;
   LExplicitAlign: Integer;
   LBaseType: string;
   LExtra: string;
   LAlignPos: Integer;
+  LDotPos: Integer;
+  LLowBound: Integer;
+  LHighBound: Integer;
   LI: Integer;
 begin
   LNode := FNodes[AIndex];
   LTypeName := LNode.Text;
 
-  // Only record types supported for now
-  if (Length(LNode.Children) = 0) or
-     (FNodes[LNode.Children[0]].Kind <> nkRecordType) then
+  if Length(LNode.Children) = 0 then
     Exit;
 
-  LRecNode := FNodes[LNode.Children[0]];
-
-  // Parse record flags from Extra: "packed", "align=N", or "packed,align=N"
-  LExtra := LRecNode.Extra;
-  LIsPacked := LExtra.Contains('packed');
-  LExplicitAlign := 0;
-  LAlignPos := LExtra.IndexOf('align=');
-  if LAlignPos >= 0 then
-    LExplicitAlign := StrToIntDef(
-      LExtra.Substring(LAlignPos + 6).Split([','])[0], 0);
-
-  // Base type from record node Text (set by parser for inheritance)
-  LBaseType := LRecNode.Text;
-
-  // Define the record on the backend
-  FBackend.DefineRecord(LTypeName, LIsPacked, LExplicitAlign, LBaseType);
-
-  // Emit fields
-  for LI := 0 to Length(LRecNode.Children) - 1 do
+  // Record type
+  if FNodes[LNode.Children[0]].Kind = nkRecordType then
   begin
-    LFieldNode := FNodes[LRecNode.Children[LI]];
-    if LFieldNode.Kind = nkFieldDecl then
+    LRecNode := FNodes[LNode.Children[0]];
+
+    // Parse record flags from Extra: "packed", "align=N", or "packed,align=N"
+    LExtra := LRecNode.Extra;
+    LIsPacked := LExtra.Contains('packed');
+    LExplicitAlign := 0;
+    LAlignPos := LExtra.IndexOf('align=');
+    if LAlignPos >= 0 then
+      LExplicitAlign := StrToIntDef(
+        LExtra.Substring(LAlignPos + 6).Split([','])[0], 0);
+
+    // Base type from record node Text (set by parser for inheritance)
+    LBaseType := LRecNode.Text;
+
+    // Define the record on the backend
+    FBackend.DefineRecord(LTypeName, LIsPacked, LExplicitAlign, LBaseType);
+
+    // Emit fields
+    for LI := 0 to Length(LRecNode.Children) - 1 do
     begin
-      // Try primitive type first, fall back to named type
-      if ResolveValueType(LFieldNode.Extra) <> gvtVoid then
-        FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
+      LFieldNode := FNodes[LRecNode.Children[LI]];
+      if LFieldNode.Kind = nkFieldDecl then
+      begin
+        // Try primitive type first, fall back to named type
+        if ResolveValueType(LFieldNode.Extra) <> gvtVoid then
+          FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
+        else
+          FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+      end;
+    end;
+
+    FBackend.EndRecord();
+  end
+
+  // Array type
+  else if FNodes[LNode.Children[0]].Kind = nkArrayType then
+  begin
+    LArrNode := FNodes[LNode.Children[0]];
+
+    // Static array: Text = "low..high", Extra = element type
+    if LArrNode.Text <> '' then
+    begin
+      LDotPos := Pos('..', LArrNode.Text);
+      LLowBound := StrToIntDef(Copy(LArrNode.Text, 1, LDotPos - 1), 0);
+      LHighBound := StrToIntDef(Copy(LArrNode.Text, LDotPos + 2, MaxInt), 0);
+
+      if ResolveValueType(LArrNode.Extra) <> gvtVoid then
+        FBackend.DefineArray(LTypeName, ResolveValueType(LArrNode.Extra),
+          LLowBound, LHighBound)
       else
-        FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+        FBackend.DefineArray(LTypeName, LArrNode.Extra, LLowBound, LHighBound);
+    end
+    else
+    begin
+      // Dynamic array: Text = "", Extra = element type
+      if ResolveValueType(LArrNode.Extra) <> gvtVoid then
+        FBackend.DefineDynArray(LTypeName, ResolveValueType(LArrNode.Extra))
+      else
+        FBackend.DefineDynArray(LTypeName, LArrNode.Extra);
     end;
   end;
+end;
 
-  FBackend.EndRecord();
+//------------------------------------------------------------------------------
+// Inline array type auto-definition
+// Parses type strings like "array[0..9] of int32" or "array of int32"
+// and defines them on the backend if not already defined.
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitInlineArrayType(const ATypeName: string);
+var
+  LBracketPos: Integer;
+  LDotDotPos: Integer;
+  LCloseBracket: Integer;
+  LOfPos: Integer;
+  LLowBound: Integer;
+  LHighBound: Integer;
+  LElemType: string;
+begin
+  // Skip if already defined on the backend
+  if FBackend.FindType(ATypeName) >= 0 then
+    Exit;
+
+  LOfPos := Pos(' of ', ATypeName);
+  if LOfPos <= 0 then
+    Exit;
+
+  LElemType := Copy(ATypeName, LOfPos + 4, MaxInt);
+
+  // Static array: "array[low..high] of elemType"
+  LBracketPos := Pos('[', ATypeName);
+  if LBracketPos > 0 then
+  begin
+    LCloseBracket := Pos(']', ATypeName);
+    LDotDotPos := Pos('..', ATypeName);
+    LLowBound := StrToIntDef(Copy(ATypeName, LBracketPos + 1,
+      LDotDotPos - LBracketPos - 1), 0);
+    LHighBound := StrToIntDef(Copy(ATypeName, LDotDotPos + 2,
+      LCloseBracket - LDotDotPos - 2), 0);
+
+    if ResolveValueType(LElemType) <> gvtVoid then
+      FBackend.DefineArray(ATypeName, ResolveValueType(LElemType),
+        LLowBound, LHighBound)
+    else
+      FBackend.DefineArray(ATypeName, LElemType, LLowBound, LHighBound);
+  end
+  else
+  begin
+    // Dynamic array: "array of elemType"
+    if ResolveValueType(LElemType) <> gvtVoid then
+      FBackend.DefineDynArray(ATypeName, ResolveValueType(LElemType))
+    else
+      FBackend.DefineDynArray(ATypeName, LElemType);
+  end;
 end;
 
 procedure TGnyScriptEmitter.EmitBlock(const AIndex: Integer);
@@ -800,8 +897,15 @@ begin
   //----------------------------------------------------------------------------
   // Non-string variable — existing path
   //----------------------------------------------------------------------------
+
+  // Auto-define inline array types on backend (e.g., "array[0..9] of int32")
+  if LNode.Extra.StartsWith('array') then
+  begin
+    EmitInlineArrayType(LNode.Extra);
+    FBackend.VarDecl(LNode.Text, LNode.Extra);
+  end
   // Record-typed variables use the string overload of VarDecl
-  if ResolveValueType(LNode.Extra) = gvtVoid then
+  else if ResolveValueType(LNode.Extra) = gvtVoid then
     FBackend.VarDecl(LNode.Text, LNode.Extra)
   else
     FBackend.VarDecl(LNode.Text, ResolveValueType(LNode.Extra));
@@ -941,6 +1045,23 @@ begin
           FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text),
           LRhsExpr);
       end;
+    end;
+    Exit;
+  end;
+
+  //----------------------------------------------------------------------------
+  // Array element assignment — arr[i] := value
+  //----------------------------------------------------------------------------
+  if LLhsNode.Kind = nkArrayIndex then
+  begin
+    if (LOp = ':=') and (Length(LLhsNode.Children) >= 2) then
+    begin
+      LRhsExpr := EmitExpr(LNode.Children[1]);
+      FBackend.SetVal(
+        FBackend.GetIndex(
+          EmitExpr(LLhsNode.Children[0]),
+          EmitExpr(LLhsNode.Children[1])),
+        LRhsExpr);
     end;
     Exit;
   end;
@@ -1111,6 +1232,7 @@ var
   LIsFloat: Boolean;
   LLeftFloat: Boolean;
   LRightFloat: Boolean;
+  LInt64Val: Int64;
   LFmt: TFormatSettings;
 
   // Check if a child expression node resolved to a float type.
@@ -1152,9 +1274,15 @@ begin
     Exit;
   LNode := FNodes[AIndex];
 
-  // Integer literal
+  // Integer literal — use Int64 for values exceeding Int32 range
   if LNode.Kind = nkIntLit then
-    Result := FBackend.Int32(StrToIntDef(LNode.Text, 0))
+  begin
+    LInt64Val := StrToInt64Def(LNode.Text, 0);
+    if (LInt64Val >= Low(Int32)) and (LInt64Val <= High(Int32)) then
+      Result := FBackend.Int32(Int32(LInt64Val))
+    else
+      Result := FBackend.Int64(LInt64Val);
+  end
 
   // Float literal (locale-safe: source always uses '.' decimal separator)
   else if LNode.Kind = nkFloatLit then
@@ -1425,6 +1553,18 @@ begin
     begin
       LLeft := EmitExpr(LNode.Children[0]);
       Result := FBackend.GetField(LLeft, LNode.Text);
+    end;
+  end
+
+  // Array indexing — array[index]
+  else if LNode.Kind = nkArrayIndex then
+  begin
+    // children[0] = array expression, children[1] = index expression
+    if Length(LNode.Children) >= 2 then
+    begin
+      LLeft := EmitExpr(LNode.Children[0]);
+      LRight := EmitExpr(LNode.Children[1]);
+      Result := FBackend.GetIndex(LLeft, LRight);
     end;
   end
 

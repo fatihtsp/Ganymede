@@ -29,7 +29,8 @@ uses
   UTest.Script.ImportHost,
   UTest.Script.ImportClause,
   UTest.Script.MatchStmt,
-  UTest.Script.Records;
+  UTest.Script.Records,
+  UTest.Arrays;
 
 procedure Menu();
 var
@@ -63,7 +64,9 @@ begin
       .Add('Match Statement',
         procedure begin TGnyTestCase.Run(TScriptMatchStmtTest) end)
       .Add('Record Types',
-        procedure begin TGnyTestCase.Run(TScriptRecordsTest) end);
+        procedure begin TGnyTestCase.Run(TScriptRecordsTest) end)
+      .Add('Array Types',
+        procedure begin TGnyTestCase.Run(TArraysTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

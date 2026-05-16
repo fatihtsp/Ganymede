@@ -48,6 +48,14 @@ type
     FieldTypeName: string;
   end;
 
+  { TGnyScriptArrayTypeInfo — metadata for array types }
+  TGnyScriptArrayTypeInfo = record
+    ElementTypeName: string;
+    IsStatic: Boolean;
+    LowBound: Integer;
+    HighBound: Integer;
+  end;
+
   { TGnyScriptScope — one level of the scope stack }
   TGnyScriptScope = class
   private
@@ -69,6 +77,7 @@ type
     FExterns: TList<TGnyScriptSymbol>;
     FModuleExports: TObjectDictionary<string, TList<TGnyScriptSymbol>>;
     FRecordTypes: TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>;
+    FArrayTypes: TDictionary<string, TGnyScriptArrayTypeInfo>;
     FLoopDepth: Integer;
 
     // Scope management
@@ -119,6 +128,13 @@ type
     function FindRecordField(const ATypeName: string;
       const AFieldName: string; var AFieldTypeName: string): Boolean;
     function GetRecordFields(const ATypeName: string): TArray<TGnyScriptRecordFieldInfo>;
+
+    // Array type lookup (for emitter)
+    function FindArrayElementType(const ATypeName: string;
+      var AElementTypeName: string): Boolean;
+    function GetArrayTypeInfo(const ATypeName: string;
+      var AInfo: TGnyScriptArrayTypeInfo): Boolean;
+    function IsArrayType(const ATypeName: string): Boolean;
   end;
 
 const
@@ -193,6 +209,7 @@ begin
     FExterns := TList<TGnyScriptSymbol>.Create();
     FModuleExports := TObjectDictionary<string, TList<TGnyScriptSymbol>>.Create([doOwnsValues]);
     FRecordTypes := TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>.Create();
+    FArrayTypes := TDictionary<string, TGnyScriptArrayTypeInfo>.Create();
   except
     on E: Exception do
     begin
@@ -204,6 +221,7 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FArrayTypes.Free();
   FRecordTypes.Free();
   FModuleExports.Free();
   FExterns.Free();
@@ -366,6 +384,7 @@ begin
   FNodes := ANodes;
   FScopes.Clear();
   FRecordTypes.Clear();
+  FArrayTypes.Clear();
 
   Status(RSSemStatusStart);
 
@@ -624,6 +643,11 @@ procedure TGnyScriptSemantics.AnalyzeVarDecl(const AIndex: Integer);
 var
   LNode: TGnyScriptNode;
   LSym: TGnyScriptSymbol;
+  LArrayInfo: TGnyScriptArrayTypeInfo;
+  LTypeName: string;
+  LBracketPos: Integer;
+  LDotDotPos: Integer;
+  LOfPos: Integer;
 begin
   LNode := FNodes[AIndex];
 
@@ -637,6 +661,33 @@ begin
   if not DeclareSymbol(LSym) then
     FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_DUPLICATE,
       RSScriptDuplicateDecl, [LNode.Text]);
+
+  // Auto-register inline array types (e.g., "array[0..9] of int32")
+  LTypeName := LNode.Extra;
+  if LTypeName.StartsWith('array') and (not FArrayTypes.ContainsKey(LTypeName)) then
+  begin
+    LArrayInfo := Default(TGnyScriptArrayTypeInfo);
+
+    // Static array: "array[low..high] of elemType"
+    LBracketPos := Pos('[', LTypeName);
+    if LBracketPos > 0 then
+    begin
+      LArrayInfo.IsStatic := True;
+      LDotDotPos := Pos('..', LTypeName);
+      LArrayInfo.LowBound := StrToIntDef(
+        Copy(LTypeName, LBracketPos + 1, LDotDotPos - LBracketPos - 1), 0);
+      LArrayInfo.HighBound := StrToIntDef(
+        Copy(LTypeName, LDotDotPos + 2,
+          Pos(']', LTypeName) - LDotDotPos - 2), 0);
+    end;
+
+    // Extract element type after " of "
+    LOfPos := Pos(' of ', LTypeName);
+    if LOfPos > 0 then
+      LArrayInfo.ElementTypeName := Copy(LTypeName, LOfPos + 4, MaxInt);
+
+    FArrayTypes.AddOrSetValue(LTypeName, LArrayInfo);
+  end;
 
   // Analyze initializer expression if present
   if Length(LNode.Children) > 0 then
@@ -682,7 +733,9 @@ var
   LSym: TGnyScriptSymbol;
   LFields: TArray<TGnyScriptRecordFieldInfo>;
   LFieldInfo: TGnyScriptRecordFieldInfo;
+  LArrayInfo: TGnyScriptArrayTypeInfo;
   LFieldCount: Integer;
+  LDotPos: Integer;
   LI: Integer;
 begin
   LNode := FNodes[AIndex];
@@ -724,6 +777,29 @@ begin
     SetLength(LFields, LFieldCount);
 
     FRecordTypes.AddOrSetValue(LNode.Text, LFields);
+  end
+
+  // If child is nkArrayType, collect array metadata
+  else if (Length(LNode.Children) > 0) and
+     (FNodes[LNode.Children[0]].Kind = nkArrayType) then
+  begin
+    LRecNode := FNodes[LNode.Children[0]]; // reuse variable for array node
+    LArrayInfo := Default(TGnyScriptArrayTypeInfo);
+    LArrayInfo.ElementTypeName := LRecNode.Extra;
+    LArrayInfo.IsStatic := LRecNode.Text <> '';
+
+    // Parse bounds from Text: "low..high"
+    if LArrayInfo.IsStatic then
+    begin
+      LDotPos := Pos('..', LRecNode.Text);
+      if LDotPos > 0 then
+      begin
+        LArrayInfo.LowBound := StrToIntDef(Copy(LRecNode.Text, 1, LDotPos - 1), 0);
+        LArrayInfo.HighBound := StrToIntDef(Copy(LRecNode.Text, LDotPos + 2, MaxInt), 0);
+      end;
+    end;
+
+    FArrayTypes.AddOrSetValue(LNode.Text, LArrayInfo);
   end;
 end;
 
@@ -877,6 +953,20 @@ begin
     end;
   end
 
+  else if LNode.Kind = nkArrayIndex then
+  begin
+    // children[0] = array expression, children[1] = index expression
+    if Length(LNode.Children) >= 2 then
+    begin
+      LLeftType := ResolveExprType(LNode.Children[0]); // array type
+      ResolveExprType(LNode.Children[1]);               // index expression
+
+      // Look up element type from array type info
+      if (LLeftType <> '') and FindArrayElementType(LLeftType, LRightType) then
+        Result := LRightType;
+    end;
+  end
+
   else if LNode.Kind = nkRecordLiteral then
   begin
     // Text = record type name, children = nkFieldInit nodes
@@ -967,6 +1057,31 @@ function TGnyScriptSemantics.GetRecordFields(
 begin
   if not FRecordTypes.TryGetValue(ATypeName, Result) then
     Result := nil;
+end;
+
+//------------------------------------------------------------------------------
+// Array type lookup
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.FindArrayElementType(const ATypeName: string;
+  var AElementTypeName: string): Boolean;
+var
+  LInfo: TGnyScriptArrayTypeInfo;
+begin
+  Result := FArrayTypes.TryGetValue(ATypeName, LInfo);
+  if Result then
+    AElementTypeName := LInfo.ElementTypeName;
+end;
+
+function TGnyScriptSemantics.GetArrayTypeInfo(const ATypeName: string;
+  var AInfo: TGnyScriptArrayTypeInfo): Boolean;
+begin
+  Result := FArrayTypes.TryGetValue(ATypeName, AInfo);
+end;
+
+function TGnyScriptSemantics.IsArrayType(const ATypeName: string): Boolean;
+begin
+  Result := FArrayTypes.ContainsKey(ATypeName);
 end;
 
 end.

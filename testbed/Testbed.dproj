@@ -144,6 +144,7 @@
         <DCCReference Include="..\src\Ganymede.Debug.SourceMap.pas"/>
         <DCCReference Include="UTest.Script.MatchStmt.pas"/>
         <DCCReference Include="UTest.Script.Records.pas"/>
+        <DCCReference Include="UTest.Arrays.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

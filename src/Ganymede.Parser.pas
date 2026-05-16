@@ -118,6 +118,7 @@ type
     function ParseConstBlock(const AParentNode: Integer): Integer;
     function ParseTypeBlock(const AParentNode: Integer): Integer;
     function ParseRecordType(): Integer;
+    function ParseArrayType(): Integer;
     function TryParseAssign(const ALhs: Integer): Integer;
 
     // Parsers — expressions (Pratt)
@@ -562,10 +563,41 @@ end;
 function TGnyScriptParser.ParseTypeExpr(): string;
 var
   LTok: TGnyScriptToken;
+  LLowTok: TGnyScriptToken;
+  LHighTok: TGnyScriptToken;
 begin
-  // For the vertical slice: just consume an identifier as type name
-  LTok := Advance();
-  Result := LTok.Text;
+  LTok := Peek();
+
+  // Array type: array [ "[" ArrayBounds "]" ] of TypeExpr
+  if LTok.Kind = tkArray then
+  begin
+    Advance(); // consume 'array'
+
+    // Static array: array[low..high] of T
+    if PeekKind() = tkLBracket then
+    begin
+      Advance(); // consume '['
+      LLowTok := Expect(tkIntLit);
+      Expect(tkRange); // '..'
+      LHighTok := Expect(tkIntLit);
+      Expect(tkRBracket);
+      Expect(tkOf);
+      Result := 'array[' + LLowTok.Text + '..' + LHighTok.Text + '] of ' +
+        ParseTypeExpr();
+    end
+    else
+    begin
+      // Dynamic array: array of T
+      Expect(tkOf);
+      Result := 'array of ' + ParseTypeExpr();
+    end;
+  end
+  else
+  begin
+    // Simple type name (identifier or built-in keyword)
+    LTok := Advance();
+    Result := LTok.Text;
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -1198,10 +1230,17 @@ begin
     // = TypeDef
     Expect(tkEq);
 
-    // Currently only record types are supported
+    // Record type
     if PeekKind() = tkRecord then
     begin
       LTypeDefNode := ParseRecordType();
+      if LTypeDefNode >= 0 then
+        AddChild(LTypeDeclNode, LTypeDefNode);
+    end
+    // Array type
+    else if PeekKind() = tkArray then
+    begin
+      LTypeDefNode := ParseArrayType();
       if LTypeDefNode >= 0 then
         AddChild(LTypeDeclNode, LTypeDefNode);
     end
@@ -1294,6 +1333,47 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// Array type: array [ "[" ArrayBounds "]" ] of TypeExpr
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseArrayType(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LArrNode: Integer;
+  LNode: TGnyScriptNode;
+begin
+  LTok := Expect(tkArray);
+  LArrNode := AddNode(nkArrayType, LTok.Range);
+
+  // Static array: array[low..high] of T
+  if PeekKind() = tkLBracket then
+  begin
+    Advance(); // consume '['
+    LTok := Expect(tkIntLit);
+    LNode := FNodes[LArrNode];
+    LNode.Text := LTok.Text; // low bound
+
+    Expect(tkRange); // '..'
+
+    LTok := Expect(tkIntLit);
+    LNode.Text := LNode.Text + '..' + LTok.Text; // "low..high"
+    FNodes[LArrNode] := LNode;
+
+    Expect(tkRBracket);
+  end;
+  // else: dynamic array (Text remains empty)
+
+  Expect(tkOf);
+
+  // Element type
+  LNode := FNodes[LArrNode];
+  LNode.Extra := ParseTypeExpr();
+  FNodes[LArrNode] := LNode;
+
+  Result := LArrNode;
+end;
+
+//------------------------------------------------------------------------------
 // Assignment: Designator ( := | += | -= | *= | /= ) Expression
 //------------------------------------------------------------------------------
 
@@ -1348,6 +1428,8 @@ begin
     Result := BP_POSTFIX  // function call
   else if AKind = tkDot then
     Result := BP_POSTFIX  // field access
+  else if AKind = tkLBracket then
+    Result := BP_POSTFIX  // array indexing
   else
     Result := BP_NONE;
 end;
@@ -1551,6 +1633,17 @@ begin
       LNode.Text := LTok.Text; // field name
       FNodes[LOpNode] := LNode;
       AddChild(LOpNode, LLeft); // object/module being accessed
+      LLeft := LOpNode;
+    end
+    else if LTok.Kind = tkLBracket then
+    begin
+      // Array indexing: expr [ index_expr ]
+      Advance(); // consume [
+      LRight := ParseExpression(BP_NONE);
+      Expect(tkRBracket);
+      LOpNode := AddNode(nkArrayIndex, LTok.Range);
+      AddChild(LOpNode, LLeft);  // array expression
+      AddChild(LOpNode, LRight); // index expression
       LLeft := LOpNode;
     end
     else

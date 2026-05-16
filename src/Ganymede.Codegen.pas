@@ -7920,7 +7920,7 @@ begin
             LLocalHandle := GetCode().AddParam(LLocal.LocalName, LLocal.LocalTypeRef.Primitive, LLocal.IsByRef)
           else
             LLocalHandle := GetCode().AddParam(LLocal.LocalName, LLocal.LocalSize, LLocal.LocalAlignment, LLocal.IsByRef);
-          LLocalHandles.Add(LLocal.LocalName, LLocalHandle);
+          LLocalHandles.AddOrSetValue(LLocal.LocalName, LLocalHandle);
         end;
       end;
       
@@ -7936,7 +7936,7 @@ begin
             LLocalHandle := GetCode().AddLocal(LLocal.LocalName, LLocal.LocalTypeRef.Primitive)
           else
             LLocalHandle := GetCode().AddLocal(LLocal.LocalName, LLocal.LocalSize, LLocal.LocalAlignment);
-          LLocalHandles.Add(LLocal.LocalName, LLocalHandle);
+          LLocalHandles.AddOrSetValue(LLocal.LocalName, LLocalHandle);
         end;
       end;
       

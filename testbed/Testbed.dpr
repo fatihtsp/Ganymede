@@ -42,7 +42,8 @@ uses
   UTest.Script.ImportClause in 'UTest.Script.ImportClause.pas',
   Ganymede.Debug.SourceMap in '..\src\Ganymede.Debug.SourceMap.pas',
   UTest.Script.MatchStmt in 'UTest.Script.MatchStmt.pas',
-  UTest.Script.Records in 'UTest.Script.Records.pas';
+  UTest.Script.Records in 'UTest.Script.Records.pas',
+  UTest.Arrays in 'UTest.Arrays.pas';
 
 begin
   RunTestbed();

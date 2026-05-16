@@ -1485,6 +1485,10 @@ begin
           LVarKey := LInstr.Op2.Var_.ToString();
           if LConstants.TryGetValue(LVarKey, LConstOp) then
           begin
+            LConstOp.ElementSize := LInstr.Op2.ElementSize;
+            LConstOp.FieldName := LInstr.Op2.FieldName;
+            LConstOp.BitWidth := LInstr.Op2.BitWidth;
+            LConstOp.BitOffset := LInstr.Op2.BitOffset;
             LInstr.Op2 := LConstOp;
             LChanged := True;
           end;
@@ -1706,6 +1710,10 @@ begin
           LVarKey := LInstr.Op2.Var_.ToString();
           if LCopies.TryGetValue(LVarKey, LSourceOp) then
           begin
+            LSourceOp.ElementSize := LInstr.Op2.ElementSize;
+            LSourceOp.FieldName := LInstr.Op2.FieldName;
+            LSourceOp.BitWidth := LInstr.Op2.BitWidth;
+            LSourceOp.BitOffset := LInstr.Op2.BitOffset;
             LInstr.Op2 := LSourceOp;
             LChanged := True;
           end;
