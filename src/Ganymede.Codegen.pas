@@ -7280,19 +7280,18 @@ begin
       if Assigned(FErrors) then
         FErrors.Add(esError, ERR_CODEGEN_JIT_FAILED, RSCodegenJITFailed, [E.Message]);
       LJIT.Free();
-      raise;
+      Exit;
     end;
   end;
 
-  // Free transferred objects
-  LJITData.TextSection.Free();
-  LJITData.ImportFixups.Free();
-  LJITData.CallFixups.Free();
-  LJITData.DataFixups.Free();
-  LJITData.GlobalFixups.Free();
-  LJITData.FuncAddrFixups.Free();
-
   finally
+    // Free JIT build data (must be in finally — exception path skips normal cleanup)
+    LJITData.TextSection.Free();
+    LJITData.ImportFixups.Free();
+    LJITData.CallFixups.Free();
+    LJITData.DataFixups.Free();
+    LJITData.GlobalFixups.Free();
+    LJITData.FuncAddrFixups.Free();
     // Free static linking objects
     LLinker.Free();
     LStaticImportIndices.Free();
