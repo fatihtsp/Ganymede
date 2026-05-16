@@ -21,13 +21,6 @@ uses
   Ganymede.Builders in '..\src\Ganymede.Builders.pas',
   Ganymede.Codegen in '..\src\Ganymede.Codegen.pas',
   Ganymede.Config in '..\src\Ganymede.Config.pas',
-  Ganymede.Debug.Client in '..\src\Ganymede.Debug.Client.pas',
-  Ganymede.Debug.DAP in '..\src\Ganymede.Debug.DAP.pas',
-  Ganymede.Debug.REPL in '..\src\Ganymede.Debug.REPL.pas',
-  Ganymede.Debug.Runtime in '..\src\Ganymede.Debug.Runtime.pas',
-  Ganymede.Debug.Server in '..\src\Ganymede.Debug.Server.pas',
-  Ganymede.Debug.SourceMap in '..\src\Ganymede.Debug.SourceMap.pas',
-  Ganymede.Debug.Target in '..\src\Ganymede.Debug.Target.pas',
   Ganymede.Emitter in '..\src\Ganymede.Emitter.pas',
   Ganymede.IR in '..\src\Ganymede.IR.pas',
   Ganymede.JIT in '..\src\Ganymede.JIT.pas',
@@ -46,7 +39,9 @@ uses
   Ganymede.Types in '..\src\Ganymede.Types.pas',
   Ganymede.Utils in '..\src\Ganymede.Utils.pas',
   UCommon in 'UCommon.pas',
-  UTest.Script.ImportClause in 'UTest.Script.ImportClause.pas';
+  UTest.Script.ImportClause in 'UTest.Script.ImportClause.pas',
+  Ganymede.Debug.SourceMap in '..\src\Ganymede.Debug.SourceMap.pas',
+  UTest.Script.MatchStmt in 'UTest.Script.MatchStmt.pas';
 
 begin
   RunTestbed();

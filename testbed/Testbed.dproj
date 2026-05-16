@@ -122,13 +122,6 @@
         <DCCReference Include="..\src\Ganymede.Builders.pas"/>
         <DCCReference Include="..\src\Ganymede.Codegen.pas"/>
         <DCCReference Include="..\src\Ganymede.Config.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.Client.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.DAP.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.REPL.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.Runtime.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.Server.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.SourceMap.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.Target.pas"/>
         <DCCReference Include="..\src\Ganymede.Emitter.pas"/>
         <DCCReference Include="..\src\Ganymede.IR.pas"/>
         <DCCReference Include="..\src\Ganymede.JIT.pas"/>
@@ -148,6 +141,8 @@
         <DCCReference Include="..\src\Ganymede.Utils.pas"/>
         <DCCReference Include="UCommon.pas"/>
         <DCCReference Include="UTest.Script.ImportClause.pas"/>
+        <DCCReference Include="..\src\Ganymede.Debug.SourceMap.pas"/>
+        <DCCReference Include="UTest.Script.MatchStmt.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

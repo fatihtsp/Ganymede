@@ -600,7 +600,7 @@ type
 
 implementation
 
-{$R Ganymede.ResData.res}
+//{$R Ganymede.ResData.res}
 
 //==============================================================================
 // TGnyNative

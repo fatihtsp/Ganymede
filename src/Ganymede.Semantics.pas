@@ -478,8 +478,10 @@ end;
 procedure TGnyScriptSemantics.AnalyzeStatement(const AIndex: Integer);
 var
   LNode: TGnyScriptNode;
+  LChild: TGnyScriptNode;
   LSym: TGnyScriptSymbol;
   LI: Integer;
+  LJ: Integer;
 begin
   if AIndex < 0 then
     Exit;
@@ -535,6 +537,32 @@ begin
     Dec(FLoopDepth);
     if Length(LNode.Children) > 1 then
       ResolveExprType(LNode.Children[1]);
+  end
+  else if LNode.Kind = nkMatch then
+  begin
+    // children[0] = selector expression
+    // children[1..N] = nkMatchArm nodes (each: labels + body block)
+    // children[N+1] = optional else block (when Extra = 'else')
+    if Length(LNode.Children) > 0 then
+      ResolveExprType(LNode.Children[0]); // selector
+
+    for LI := 1 to Length(LNode.Children) - 1 do
+    begin
+      LChild := FNodes[LNode.Children[LI]];
+      if LChild.Kind = nkMatchArm then
+      begin
+        // Analyze all children: labels are expressions, last child is body block
+        for LJ := 0 to Length(LChild.Children) - 1 do
+        begin
+          if FNodes[LChild.Children[LJ]].Kind = nkBlock then
+            AnalyzeBlock(LChild.Children[LJ])
+          else
+            ResolveExprType(LChild.Children[LJ]);
+        end;
+      end
+      else if LChild.Kind = nkBlock then
+        AnalyzeBlock(LNode.Children[LI]); // else block
+    end;
   end
   else if LNode.Kind = nkLeave then
   begin

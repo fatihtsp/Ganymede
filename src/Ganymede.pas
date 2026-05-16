@@ -43,7 +43,13 @@ const
   gvtFloat64 = TGnyValueType.gvtFloat64;
   gvtPointer = TGnyValueType.gvtPointer;
 
+  plDefault = Ganymede.Types.TLinkage.plDefault;
+  plC       = Ganymede.Types.TLinkage.plC;
+
 type
+
+  TGnyValueType = Ganymede.Types.TGnyValueType;
+
   { TGnyOptLevel }
   TGnyOptLevel = (
     olNone,    // No optimization
@@ -108,20 +114,6 @@ type
     // Override to propagate to all child components
     procedure SetStatusCallback(const ACallback: TGnyStatusCallback; const AUserData: Pointer = nil); override;
 
-    // Load source
-    function LoadFromString(const ASource: string;
-      const AFilename: string = ''): TGanymede;
-    function LoadFromFile(const AFilename: string): TGanymede;
-
-    // Compile — lex + parse + semantic + emit + build (routes by module kind)
-    function Compile(): Boolean;
-
-    // Convenience — set output path then compile (for lib/exe modules)
-    //function CompileToLib(const AOutputPath: string): Boolean;
-
-    // Set output path for lib/exe targets (derived from filename if not set)
-    function SetOutputPath(const APath: string): TGanymede;
-
     // Register a host function pointer for script calls
     function ImportHost(const AFuncName: string;
       const AHostAddr: Pointer;
@@ -129,8 +121,19 @@ type
       const AReturn: TGnyValueType = gvtVoid;
       const ALinkage: TGnyLinkage = plC): TGanymede;
 
+    // Set output path for lib/exe targets (derived from filename if not set)
+    function SetOutputPath(const APath: string): TGanymede;
+
     // Add a library search path
     function AddLibPath(const APath: string): TGanymede;
+
+    // Load source
+    function LoadFromString(const ASource: string;
+      const AFilename: string = ''): TGanymede;
+    function LoadFromFile(const AFilename: string): TGanymede;
+
+    // Compile — lex + parse + semantic + emit + build (routes by module kind)
+    function Compile(): Boolean;
 
     // Symbol access (forwarded from JIT)
     function GetSymbol(const AName: string): Pointer;
@@ -152,14 +155,12 @@ type
     // Print all errors/warnings/hints with color-coded severity
     procedure PrintErrors();
 
+    // Optimization level
+    function  GetOptimizationLevel(): TGnyOptLevel;
+    procedure SetOptimizationLevel(const ALevel: TGnyOptLevel);
+
     // State
     property Compiled: Boolean read GetCompiled;
-
-    // Internal access (for API registration, advanced use)
-    property Backend: TGnyNativeBackend read FBackend;
-
-    // Optimization level
-    procedure SetOptimizationLevel(const ALevel: TGnyOptLevel);
   end;
 
 implementation
@@ -793,6 +794,11 @@ begin
       Result.AsInt64 := LInt;
     end;
   end;
+end;
+
+function  TGanymede.GetOptimizationLevel(): TGnyOptLevel;
+begin
+  Result := FOptimizationLevel;
 end;
 
 procedure TGanymede.SetOptimizationLevel(const ALevel: TGnyOptLevel);
