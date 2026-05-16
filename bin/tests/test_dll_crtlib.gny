@@ -1,0 +1,6 @@
+module dll test_dll_crtlib;
+
+public routine abs(x: int64): int64;
+  external "msvcrt";
+
+end.

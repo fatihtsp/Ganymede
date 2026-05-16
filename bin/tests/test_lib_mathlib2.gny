@@ -1,0 +1,8 @@
+module lib test_lib_mathlib2;
+
+public routine lib_mul(a: int64; b: int64): int64;
+begin
+  return a * b;
+end;
+
+end.

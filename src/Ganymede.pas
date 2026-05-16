@@ -27,7 +27,7 @@ uses
   Ganymede.Native;
 
 const
-  GNY_SCRIPT_EXT = 'pxs';
+  GNY_SCRIPT_EXT = 'gny';
 
   //--- Value type aliases (re-exported from Ganymede.Types) -------------------
   gvtVoid    = TGnyValueType.gvtVoid;
@@ -74,25 +74,6 @@ type
     HostAddr: Pointer;
     ParamTypes: TArray<TGnyValueType>;
     ReturnType: TGnyValueType;
-  end;
-
-  { TGnyLibImport — stored static lib import for replay on recompile }
-  TGnyLibImport = record
-    LibName: string;
-    FuncName: string;
-    ParamTypes: TArray<TGnyValueType>;
-    ReturnType: TGnyValueType;
-    VarArgs: Boolean;
-    Linkage: TGnyLinkage;
-  end;
-
-  { TGnyDllImport — stored DLL import for replay on recompile }
-  TGnyDllImport = record
-    DllName: string;
-    FuncName: string;
-    ParamTypes: TArray<TGnyValueType>;
-    ReturnType: TGnyValueType;
-    VarArgs: Boolean;
     Linkage: TGnyLinkage;
   end;
 
@@ -106,8 +87,6 @@ type
     FBackend: TGnyNativeBackend;
     FJIT: TGnyJIT;
     FHostImports: TList<TGnyHostImport>;
-    FLibImports: TList<TGnyLibImport>;
-    FDllImports: TList<TGnyDllImport>;
     FLibPaths: TStringList;
     FSource: string;
     FFilename: string;
@@ -116,7 +95,9 @@ type
     FDumpIR: Boolean;
     function GetCompiled(): Boolean;
     function ValueTypeToStr(const AType: TGnyValueType): string;
+    function StrToValueType(const AName: string): TGnyValueType;
     procedure ResetBackend();
+    procedure ProcessImports();
 
   public
     constructor Create(); override;
@@ -139,26 +120,11 @@ type
     // Set output path for lib/exe targets (derived from filename if not set)
     function SetOutputPath(const APath: string): TGanymede;
 
-    // Register a host function pointer for JIT calls
+    // Register a host function pointer for script calls
     function ImportHost(const AFuncName: string;
       const AHostAddr: Pointer;
       const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = gvtVoid): TGanymede;
-
-    // Register a static library import for JIT calls
-    function ImportLib(const ALibName: string;
-      const AFuncName: string;
-      const AParams: array of TGnyValueType;
       const AReturn: TGnyValueType = gvtVoid;
-      const AVarArgs: Boolean = False;
-      const ALinkage: TGnyLinkage = plC): TGanymede;
-
-    // Register a DLL import for JIT calls
-    function ImportDll(const ADllName: string;
-      const AFuncName: string;
-      const AParams: array of TGnyValueType;
-      const AReturn: TGnyValueType = gvtVoid;
-      const AVarArgs: Boolean = False;
       const ALinkage: TGnyLinkage = plC): TGanymede;
 
     // Add a library search path
@@ -222,8 +188,6 @@ begin
     FBackend.SetErrors(FErrors);
 
     FHostImports := TList<TGnyHostImport>.Create();
-    FLibImports := TList<TGnyLibImport>.Create();
-    FDllImports := TList<TGnyDllImport>.Create();
     FLibPaths := TStringList.Create();
     FLibPaths.CaseSensitive := False;
     FLibPaths.Duplicates := dupIgnore;
@@ -244,8 +208,6 @@ destructor TGanymede.Destroy();
 begin
   FreeAndNil(FJIT);
   FreeAndNil(FLibPaths);
-  FreeAndNil(FDllImports);
-  FreeAndNil(FLibImports);
   FreeAndNil(FHostImports);
   FreeAndNil(FBackend);
   FreeAndNil(FEmitter);
@@ -307,7 +269,7 @@ end;
 
 function TGanymede.ImportHost(const AFuncName: string;
   const AHostAddr: Pointer; const AParams: array of TGnyValueType;
-  const AReturn: TGnyValueType): TGanymede;
+  const AReturn: TGnyValueType; const ALinkage: TGnyLinkage): TGanymede;
 var
   LImport: TGnyHostImport;
   LI: Integer;
@@ -317,6 +279,7 @@ begin
   LImport.FuncName := AFuncName;
   LImport.HostAddr := AHostAddr;
   LImport.ReturnType := AReturn;
+  LImport.Linkage := ALinkage;
   SetLength(LImport.ParamTypes, Length(AParams));
   for LI := 0 to High(AParams) do
     LImport.ParamTypes[LI] := AParams[LI];
@@ -324,54 +287,6 @@ begin
 
   // Register on current backend
   FBackend.ImportHost(AFuncName, AHostAddr, AParams, AReturn);
-  Result := Self;
-end;
-
-function TGanymede.ImportLib(const ALibName: string;
-  const AFuncName: string; const AParams: array of TGnyValueType;
-  const AReturn: TGnyValueType; const AVarArgs: Boolean;
-  const ALinkage: TGnyLinkage): TGanymede;
-var
-  LImport: TGnyLibImport;
-  LI: Integer;
-begin
-  // Store for replay on recompile
-  LImport := Default(TGnyLibImport);
-  LImport.LibName := ALibName;
-  LImport.FuncName := AFuncName;
-  LImport.ReturnType := AReturn;
-  LImport.VarArgs := AVarArgs;
-  LImport.Linkage := ALinkage;
-  SetLength(LImport.ParamTypes, Length(AParams));
-  for LI := 0 to High(AParams) do
-    LImport.ParamTypes[LI] := AParams[LI];
-  FLibImports.Add(LImport);
-
-  // Register on current backend
-  FBackend.ImportLib(ALibName, AFuncName, AParams, AReturn, AVarArgs, ALinkage);
-  Result := Self;
-end;
-
-function TGanymede.ImportDll(const ADllName: string;
-  const AFuncName: string; const AParams: array of TGnyValueType;
-  const AReturn: TGnyValueType; const AVarArgs: Boolean;
-  const ALinkage: TGnyLinkage): TGanymede;
-var
-  LImport: TGnyDllImport;
-  LI: Integer;
-begin
-  LImport := Default(TGnyDllImport);
-  LImport.DllName := ADllName;
-  LImport.FuncName := AFuncName;
-  LImport.ReturnType := AReturn;
-  LImport.VarArgs := AVarArgs;
-  LImport.Linkage := ALinkage;
-  SetLength(LImport.ParamTypes, Length(AParams));
-  for LI := 0 to High(AParams) do
-    LImport.ParamTypes[LI] := AParams[LI];
-  FDllImports.Add(LImport);
-
-  FBackend.ImportDll(ADllName, AFuncName, AParams, AReturn, AVarArgs, ALinkage);
   Result := Self;
 end;
 
@@ -390,8 +305,6 @@ procedure TGanymede.ResetBackend();
 var
   LI: Integer;
   LHostImport: TGnyHostImport;
-  LLibImport: TGnyLibImport;
-  LDllImport: TGnyDllImport;
 begin
   FreeAndNil(FJIT);
   FreeAndNil(FBackend);
@@ -407,24 +320,6 @@ begin
     LHostImport := FHostImports[LI];
     FBackend.ImportHost(LHostImport.FuncName, LHostImport.HostAddr,
       LHostImport.ParamTypes, LHostImport.ReturnType);
-  end;
-
-  // Replay stored lib imports onto fresh backend
-  for LI := 0 to FLibImports.Count - 1 do
-  begin
-    LLibImport := FLibImports[LI];
-    FBackend.ImportLib(LLibImport.LibName, LLibImport.FuncName,
-      LLibImport.ParamTypes, LLibImport.ReturnType,
-      LLibImport.VarArgs, LLibImport.Linkage);
-  end;
-
-  // Replay stored DLL imports onto fresh backend
-  for LI := 0 to FDllImports.Count - 1 do
-  begin
-    LDllImport := FDllImports[LI];
-    FBackend.ImportDll(LDllImport.DllName, LDllImport.FuncName,
-      LDllImport.ParamTypes, LDllImport.ReturnType,
-      LDllImport.VarArgs, LDllImport.Linkage);
   end;
 
   // Replay stored lib search paths
@@ -453,6 +348,242 @@ begin
     gvtPointer: Result := 'pointer';
   else
     Result := 'void';
+  end;
+end;
+
+function TGanymede.StrToValueType(const AName: string): TGnyValueType;
+begin
+  if AName = 'int8' then
+    Result := gvtInt8
+  else if AName = 'int16' then
+    Result := gvtInt16
+  else if AName = 'int32' then
+    Result := gvtInt32
+  else if AName = 'int64' then
+    Result := gvtInt64
+  else if AName = 'uint8' then
+    Result := gvtUInt8
+  else if AName = 'uint16' then
+    Result := gvtUInt16
+  else if AName = 'uint32' then
+    Result := gvtUInt32
+  else if AName = 'uint64' then
+    Result := gvtUInt64
+  else if AName = 'float32' then
+    Result := gvtFloat32
+  else if AName = 'float64' then
+    Result := gvtFloat64
+  else if AName = 'boolean' then
+    Result := gvtInt8
+  else if AName = 'string' then
+    Result := gvtPointer
+  else if AName = 'wstring' then
+    Result := gvtPointer
+  else if AName = 'pointer' then
+    Result := gvtPointer
+  else
+    Result := gvtVoid;
+end;
+
+procedure TGanymede.ProcessImports();
+var
+  LRootNode: TGnyScriptNode;
+  LMainRoot: Integer;
+  LChildIdx: Integer;
+  LImportNode: TGnyScriptNode;
+  LModuleNames: TArray<string>;
+  LCount: Integer;
+  LI: Integer;
+  LJ: Integer;
+  LK: Integer;
+  LModuleName: string;
+  LSourceDir: string;
+  LResolvedPath: string;
+  LFound: Boolean;
+  LCandidatePath: string;
+  LImportSource: string;
+  LImportLexer: TGnyScriptLexer;
+  LImportParser: TGnyScriptParser;
+  LImpRoot: Integer;
+  LImpRootNode: TGnyScriptNode;
+  LImpModuleName: string;
+  LImpChildIdx: Integer;
+  LImpChildNode: TGnyScriptNode;
+  LIndexOffset: Integer;
+  LGraftedIdx: Integer;
+  LModuleExports: TArray<TGnyScriptSymbol>;
+  LExportCount: Integer;
+  LExportSym: TGnyScriptSymbol;
+  LParamNode: TGnyScriptNode;
+  LParamIdx: Integer;
+  LParamCount: Integer;
+
+  // Recursively copy a node tree from the import parser into the main parser,
+  // adjusting all child indices by the offset. Returns the new index.
+  function GraftNode(const AParser: TGnyScriptParser; const ASrcIdx: Integer;
+    const AOffset: Integer): Integer;
+  var
+    LSrcNode: TGnyScriptNode;
+    LNewNode: TGnyScriptNode;
+    LNewIdx: Integer;
+    LCI: Integer;
+  begin
+    LSrcNode := AParser.Nodes[ASrcIdx];
+    LNewNode := LSrcNode; // copy record
+    // Remap children to new indices
+    SetLength(LNewNode.Children, Length(LSrcNode.Children));
+    for LCI := 0 to Length(LSrcNode.Children) - 1 do
+      LNewNode.Children[LCI] := LSrcNode.Children[LCI] + AOffset;
+    LNewIdx := FParser.Nodes.Count;
+    FParser.Nodes.Add(LNewNode);
+    Result := LNewIdx;
+  end;
+
+begin
+  LMainRoot := FParser.Root;
+  LRootNode := FParser.Nodes[LMainRoot];
+
+  // Derive source directory from the importing file
+  if not FFilename.IsEmpty then
+    LSourceDir := TPath.GetDirectoryName(TPath.GetFullPath(FFilename))
+  else
+    LSourceDir := '';
+
+  // Walk root children looking for nkImport nodes
+  for LI := 0 to Length(LRootNode.Children) - 1 do
+  begin
+    LChildIdx := LRootNode.Children[LI];
+    LImportNode := FParser.Nodes[LChildIdx];
+    if LImportNode.Kind <> nkImport then
+      Continue;
+
+    // Collect module names: first in Text, rest in children
+    LCount := 1 + Length(LImportNode.Children);
+    SetLength(LModuleNames, LCount);
+    LModuleNames[0] := LImportNode.Text;
+    for LJ := 0 to Length(LImportNode.Children) - 1 do
+      LModuleNames[LJ + 1] := FParser.Nodes[LImportNode.Children[LJ]].Text;
+
+    // Process each imported module
+    for LJ := 0 to LCount - 1 do
+    begin
+      LModuleName := LModuleNames[LJ];
+
+      // Resolve source file: source dir first, then lib paths
+      LFound := False;
+      LResolvedPath := '';
+
+      if not LSourceDir.IsEmpty then
+      begin
+        LCandidatePath := TPath.Combine(LSourceDir, LModuleName + '.' + GNY_SCRIPT_EXT);
+        if TFile.Exists(LCandidatePath) then
+        begin
+          LResolvedPath := LCandidatePath;
+          LFound := True;
+        end;
+      end;
+
+      if not LFound then
+      begin
+        for LK := 0 to FLibPaths.Count - 1 do
+        begin
+          LCandidatePath := TPath.Combine(FLibPaths[LK], LModuleName + '.' + GNY_SCRIPT_EXT);
+          if TFile.Exists(LCandidatePath) then
+          begin
+            LResolvedPath := LCandidatePath;
+            LFound := True;
+            Break;
+          end;
+        end;
+      end;
+
+      if not LFound then
+      begin
+        FErrors.Add(LImportNode.Range, esError, '',
+          'Cannot resolve import ''%s'': source file not found', [LModuleName]);
+        Continue;
+      end;
+
+      // Read imported module source
+      try
+        LImportSource := TFile.ReadAllText(LResolvedPath);
+      except
+        on E: Exception do
+        begin
+          FErrors.Add(LImportNode.Range, esError, '',
+            'Failed to read import ''%s'': %s', [LModuleName, E.Message]);
+          Continue;
+        end;
+      end;
+
+      // Lex + parse imported module
+      LImportLexer := TGnyScriptLexer.Create();
+      LImportParser := TGnyScriptParser.Create();
+      try
+        LImportLexer.SetErrors(FErrors);
+        LImportParser.SetErrors(FErrors);
+
+        if not LImportLexer.Tokenize(LImportSource, LResolvedPath) then
+          Continue;
+        if not LImportParser.Parse(LImportLexer.Tokens) then
+          Continue;
+
+        LImpRoot := LImportParser.Root;
+        LImpRootNode := LImportParser.Nodes[LImpRoot];
+        LImpModuleName := LImpRootNode.Text;
+
+        // Graft: copy ALL nodes from imported parser into main parser
+        LIndexOffset := FParser.Nodes.Count;
+        for LK := 0 to LImportParser.Nodes.Count - 1 do
+          GraftNode(LImportParser, LK, LIndexOffset);
+
+        // Collect exports and add public declarations as children of main module
+        LExportCount := 0;
+        SetLength(LModuleExports, Length(LImpRootNode.Children));
+
+        for LK := 0 to Length(LImpRootNode.Children) - 1 do
+        begin
+          LImpChildIdx := LImpRootNode.Children[LK];
+          LImpChildNode := LImportParser.Nodes[LImpChildIdx];
+
+          if LImpChildNode.Kind <> nkRoutineDecl then
+            Continue;
+          if not LImpChildNode.IsPublic then
+            Continue;
+
+          // Add grafted node as child of main module
+          LGraftedIdx := LImpChildIdx + LIndexOffset;
+          LRootNode := FParser.Nodes[LMainRoot];
+          SetLength(LRootNode.Children, Length(LRootNode.Children) + 1);
+          LRootNode.Children[Length(LRootNode.Children) - 1] := LGraftedIdx;
+          FParser.Nodes[LMainRoot] := LRootNode;
+
+          // Track export for semantic module registration
+          LExportSym := Default(TGnyScriptSymbol);
+          LExportSym.SymbolName := LImpChildNode.Text;
+          LExportSym.Kind := skRoutine;
+          LExportSym.ReturnType := LImpChildNode.Extra;
+          LParamCount := 0;
+          for LParamIdx := 0 to Length(LImpChildNode.Children) - 1 do
+          begin
+            LParamNode := LImportParser.Nodes[LImpChildNode.Children[LParamIdx]];
+            if LParamNode.Kind = nkParamDecl then
+              Inc(LParamCount);
+          end;
+          LExportSym.ParamCount := LParamCount;
+          LExportSym.NodeIndex := LGraftedIdx;
+          LModuleExports[LExportCount] := LExportSym;
+          Inc(LExportCount);
+        end;
+
+        // Register module with its exported symbols in semantics
+        SetLength(LModuleExports, LExportCount);
+        FSemantics.RegisterModule(LImpModuleName, LModuleExports);
+      finally
+        LImportParser.Free();
+        LImportLexer.Free();
+      end;
+    end;
   end;
 end;
 
@@ -489,7 +620,12 @@ begin
   // Read module kind from AST (mem, lib, exe)
   LModuleKind := FParser.Nodes[FParser.Root].Extra;
 
-  // Pre-register imported functions (from API/host) as known externals
+  // Phase 2b: Resolve and process import clauses
+  ProcessImports();
+  if FErrors.ErrorCount() > 0 then
+    Exit;
+
+  // Pre-register imported functions (from API/host + imports) as known externals
   LIR := FBackend.GetIR();
   for LI := 0 to LIR.GetImportCount() - 1 do
   begin

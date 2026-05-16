@@ -28,7 +28,8 @@ type
     skParam,
     skVariable,
     skConst,
-    skType
+    skType,
+    skModule
   );
 
   { TGnyScriptSymbol }
@@ -58,6 +59,7 @@ type
     FNodes: TList<TGnyScriptNode>;
     FScopes: TObjectList<TGnyScriptScope>;
     FExterns: TList<TGnyScriptSymbol>;
+    FModuleExports: TObjectDictionary<string, TList<TGnyScriptSymbol>>;
     FLoopDepth: Integer;
 
     // Scope management
@@ -65,6 +67,8 @@ type
     procedure PopScope();
     function FindSymbol(const AName: string; var ASymbol: TGnyScriptSymbol): Boolean;
     function DeclareSymbol(const ASymbol: TGnyScriptSymbol): Boolean;
+    function FindModuleExport(const AModuleName: string;
+      const ASymbolName: string; var ASymbol: TGnyScriptSymbol): Boolean;
 
     // AST walkers
     procedure AnalyzeModule(const AIndex: Integer);
@@ -88,6 +92,10 @@ type
     // accepts calls to it without a source-level declaration.
     procedure RegisterExtern(const AName: string;
       const AParamCount: Integer; const AReturnType: string);
+
+    // Register an imported module with its exported symbols
+    procedure RegisterModule(const AModuleName: string;
+      const AExports: TArray<TGnyScriptSymbol>);
 
     // Symbol lookup for emitter
     function LookupSymbol(const AName: string;
@@ -142,6 +150,7 @@ begin
   try
     FScopes := TObjectList<TGnyScriptScope>.Create(True);
     FExterns := TList<TGnyScriptSymbol>.Create();
+    FModuleExports := TObjectDictionary<string, TList<TGnyScriptSymbol>>.Create([doOwnsValues]);
   except
     on E: Exception do
     begin
@@ -153,6 +162,7 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FModuleExports.Free();
   FExterns.Free();
   FScopes.Free();
   inherited Destroy();
@@ -218,6 +228,49 @@ begin
   LSym.NodeIndex := -1;
 
   FExterns.Add(LSym);
+end;
+
+procedure TGnyScriptSemantics.RegisterModule(const AModuleName: string;
+  const AExports: TArray<TGnyScriptSymbol>);
+var
+  LModSym: TGnyScriptSymbol;
+  LExportList: TList<TGnyScriptSymbol>;
+  LI: Integer;
+begin
+  // Register module as a symbol so it can be found in scope
+  LModSym := Default(TGnyScriptSymbol);
+  LModSym.SymbolName := AModuleName;
+  LModSym.Kind := skModule;
+  LModSym.NodeIndex := -1;
+  FExterns.Add(LModSym);
+
+  // Store exported symbols for qualified lookup
+  LExportList := TList<TGnyScriptSymbol>.Create();
+  for LI := 0 to Length(AExports) - 1 do
+    LExportList.Add(AExports[LI]);
+
+  // doOwnsValues handles freeing the old list on replacement
+  FModuleExports.AddOrSetValue(AModuleName, LExportList);
+end;
+
+function TGnyScriptSemantics.FindModuleExport(const AModuleName: string;
+  const ASymbolName: string; var ASymbol: TGnyScriptSymbol): Boolean;
+var
+  LExportList: TList<TGnyScriptSymbol>;
+  LI: Integer;
+begin
+  Result := False;
+  if not FModuleExports.TryGetValue(AModuleName, LExportList) then
+    Exit;
+  for LI := 0 to LExportList.Count - 1 do
+  begin
+    if LExportList[LI].SymbolName = ASymbolName then
+    begin
+      ASymbol := LExportList[LI];
+      Result := True;
+      Exit;
+    end;
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -608,13 +661,49 @@ begin
       Result := ResolveExprType(LNode.Children[0]);
   end
 
+  else if LNode.Kind = nkFieldAccess then
+  begin
+    // children[0] = LHS (object/module), Text = field name
+    if Length(LNode.Children) > 0 then
+    begin
+      if (FNodes[LNode.Children[0]].Kind = nkIdent) and
+         FindSymbol(FNodes[LNode.Children[0]].Text, LSym) and
+         (LSym.Kind = skModule) then
+      begin
+        // Module-qualified access: module.symbol
+        if FindModuleExport(FNodes[LNode.Children[0]].Text, LNode.Text, LSym) then
+          Result := LSym.ReturnType
+        else
+          FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
+            RSScriptUndeclaredIdent, [FNodes[LNode.Children[0]].Text + '.' + LNode.Text]);
+      end
+      else
+        // General field access — resolve LHS, field type TBD
+        ResolveExprType(LNode.Children[0]);
+    end;
+  end
+
   else if LNode.Kind = nkFuncCall then
   begin
     // children[0] = callee, children[1..n] = args
     if Length(LNode.Children) > 0 then
     begin
       LNode := FNodes[LNode.Children[0]];
-      if (LNode.Kind = nkIdent) and FindSymbol(LNode.Text, LSym) then
+
+      // Module-qualified call: module.func(args)
+      if (LNode.Kind = nkFieldAccess) and (Length(LNode.Children) > 0) and
+         (FNodes[LNode.Children[0]].Kind = nkIdent) and
+         FindSymbol(FNodes[LNode.Children[0]].Text, LSym) and
+         (LSym.Kind = skModule) then
+      begin
+        if FindModuleExport(FNodes[LNode.Children[0]].Text, LNode.Text, LSym) then
+          Result := LSym.ReturnType
+        else
+          FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
+            RSScriptUndeclaredIdent, [FNodes[LNode.Children[0]].Text + '.' + LNode.Text]);
+      end
+      // Direct call: func(args)
+      else if (LNode.Kind = nkIdent) and FindSymbol(LNode.Text, LSym) then
         Result := LSym.ReturnType
       else if LNode.Kind = nkIdent then
         FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,

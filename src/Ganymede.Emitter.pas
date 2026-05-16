@@ -35,6 +35,15 @@ type
     // Type resolution
     function ResolveValueType(const ATypeName: string): TGnyValueType;
 
+    // Helper — check if a routine has an nkExternalDecl child
+    function HasExternalChild(const AIndex: Integer): Boolean;
+
+    // Helper — resolve linkage from nkDirective child ("C" → plC, else plDefault)
+    function ResolveLinkage(const AIndex: Integer): TGnyLinkage;
+
+    // Register external declaration on backend (ImportLib/ImportDll)
+    procedure EmitExternalDecl(const AIndex: Integer);
+
     // AST walkers
     procedure EmitModule(const AIndex: Integer);
     procedure EmitRoutineDecl(const AIndex: Integer);
@@ -116,6 +125,93 @@ begin
     Result := gvtVoid;
 end;
 
+function TGnyScriptEmitter.HasExternalChild(const AIndex: Integer): Boolean;
+var
+  LNode: TGnyScriptNode;
+  LI: Integer;
+begin
+  Result := False;
+  LNode := FNodes[AIndex];
+  for LI := 0 to Length(LNode.Children) - 1 do
+  begin
+    if FNodes[LNode.Children[LI]].Kind = nkExternalDecl then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+function TGnyScriptEmitter.ResolveLinkage(const AIndex: Integer): TGnyLinkage;
+var
+  LNode: TGnyScriptNode;
+  LI: Integer;
+begin
+  Result := plC; // C linkage by default (no mangling)
+  LNode := FNodes[AIndex];
+  for LI := 0 to Length(LNode.Children) - 1 do
+  begin
+    if (FNodes[LNode.Children[LI]].Kind = nkDirective) and
+       (FNodes[LNode.Children[LI]].Text = 'cpplink') then
+    begin
+      Result := plDefault; // C++ Itanium mangling
+      Exit;
+    end;
+  end;
+end;
+
+procedure TGnyScriptEmitter.EmitExternalDecl(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LChild: TGnyScriptNode;
+  LFuncName: string;
+  LRetType: TGnyValueType;
+  LParamTypes: TArray<TGnyValueType>;
+  LParamCount: Integer;
+  LExternalName: string;
+  LLinkage: TGnyLinkage;
+  LI: Integer;
+begin
+  LNode := FNodes[AIndex];
+  LFuncName := LNode.Text;
+  LLinkage := ResolveLinkage(AIndex);
+
+  // Resolve return type
+  if LNode.Extra <> '' then
+    LRetType := ResolveValueType(LNode.Extra)
+  else
+    LRetType := gvtVoid;
+
+  // Extract parameter types and external name from children
+  LParamCount := 0;
+  SetLength(LParamTypes, Length(LNode.Children));
+  LExternalName := '';
+
+  for LI := 0 to Length(LNode.Children) - 1 do
+  begin
+    LChild := FNodes[LNode.Children[LI]];
+    if LChild.Kind = nkParamDecl then
+    begin
+      LParamTypes[LParamCount] := ResolveValueType(LChild.Extra);
+      Inc(LParamCount);
+    end
+    else if LChild.Kind = nkExternalDecl then
+      LExternalName := LChild.Text;
+  end;
+  SetLength(LParamTypes, LParamCount);
+
+  // Dispatch by external name extension
+  if LExternalName.EndsWith('.lib', True) then
+    FBackend.ImportLib(
+      LExternalName.Substring(0, LExternalName.Length - 4),
+      LFuncName, LParamTypes, LRetType, False, LLinkage)
+  else if LExternalName.EndsWith('.dll', True) then
+    FBackend.ImportDll(LExternalName, LFuncName, LParamTypes, LRetType, False, LLinkage)
+  else if LExternalName <> '' then
+    // Bare name → DLL
+    FBackend.ImportDll(LExternalName + '.dll', LFuncName, LParamTypes, LRetType, False, LLinkage);
+end;
+
 //------------------------------------------------------------------------------
 // Main entry point
 //------------------------------------------------------------------------------
@@ -150,7 +246,12 @@ begin
   begin
     LChild := FNodes[LNode.Children[LI]];
     if LChild.Kind = nkRoutineDecl then
-      EmitRoutineDecl(LNode.Children[LI])
+    begin
+      if HasExternalChild(LNode.Children[LI]) then
+        EmitExternalDecl(LNode.Children[LI])  // register on backend
+      else
+        EmitRoutineDecl(LNode.Children[LI]);  // compile function body
+    end
     else if LChild.Kind = nkVarDecl then
     begin
       // Module-level variable → global
@@ -184,7 +285,7 @@ begin
     LRetType := gvtVoid;
 
   // Begin function definition
-  FBackend.Func(LNode.Text, LRetType, False, plDefault, LNode.IsPublic);
+  FBackend.Func(LNode.Text, LRetType, False, ResolveLinkage(AIndex), LNode.IsPublic);
   FTempIndex := 0;
 
   // Emit parameters
@@ -230,6 +331,7 @@ procedure TGnyScriptEmitter.EmitStatement(const AIndex: Integer);
 var
   LNode: TGnyScriptNode;
   LCallee: TGnyScriptNode;
+  LFuncName: string;
   LArgs: array of TGnyExpr;
   LParamTypes: TArray<TGnyValueType>;
   LI: Integer;
@@ -262,7 +364,15 @@ begin
     if Length(LNode.Children) > 0 then
     begin
       LCallee := FNodes[LNode.Children[0]];
+
+      // Resolve function name: direct ident or module.func field access
+      LFuncName := '';
       if LCallee.Kind = nkIdent then
+        LFuncName := LCallee.Text
+      else if (LCallee.Kind = nkFieldAccess) then
+        LFuncName := LCallee.Text; // bare function name from field access
+
+      if LFuncName <> '' then
       begin
         SetLength(LArgs, Length(LNode.Children) - 1);
         for LI := 1 to Length(LNode.Children) - 1 do
@@ -270,8 +380,7 @@ begin
 
         // Int→float argument coercion: only wrap integer LITERALS with IntToFloat64
         // when the import parameter expects float32/float64.
-        // Float literals and other expressions are already float — don't double-convert.
-        LParamTypes := FBackend.GetImportParamTypes(LCallee.Text);
+        LParamTypes := FBackend.GetImportParamTypes(LFuncName);
         for LI := 0 to High(LArgs) do
         begin
           if (LI < Length(LParamTypes)) and
@@ -281,9 +390,9 @@ begin
         end;
 
         if Length(LArgs) > 0 then
-          FBackend.Call(LCallee.Text, LArgs)
+          FBackend.Call(LFuncName, LArgs)
         else
-          FBackend.Call(LCallee.Text);
+          FBackend.Call(LFuncName);
       end;
     end;
   end
@@ -726,6 +835,7 @@ var
   LRight: TGnyExpr;
   LArgs: TArray<TGnyExpr>;
   LCallee: TGnyScriptNode;
+  LFuncName: string;
   LI: Integer;
   LIsFloat: Boolean;
   LLeftFloat: Boolean;
@@ -1007,19 +1117,28 @@ begin
   // Function call
   else if LNode.Kind = nkFuncCall then
   begin
-    // children[0] = callee ident, children[1..n] = args
+    // children[0] = callee, children[1..n] = args
     if Length(LNode.Children) > 0 then
     begin
       LCallee := FNodes[LNode.Children[0]];
 
-      // Build argument array
-      SetLength(LArgs, Length(LNode.Children) - 1);
-      for LI := 1 to Length(LNode.Children) - 1 do
-        LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
-
-      // Emit as Invoke (returns a value)
+      // Resolve function name: direct ident or module.func field access
+      LFuncName := '';
       if LCallee.Kind = nkIdent then
-        Result := FBackend.Invoke(LCallee.Text, LArgs);
+        LFuncName := LCallee.Text
+      else if LCallee.Kind = nkFieldAccess then
+        LFuncName := LCallee.Text; // bare function name
+
+      if LFuncName <> '' then
+      begin
+        // Build argument array
+        SetLength(LArgs, Length(LNode.Children) - 1);
+        for LI := 1 to Length(LNode.Children) - 1 do
+          LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
+
+        // Emit as Invoke (returns a value)
+        Result := FBackend.Invoke(LFuncName, LArgs);
+      end;
     end;
   end;
 end;

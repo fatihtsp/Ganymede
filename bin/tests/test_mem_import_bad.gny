@@ -1,0 +1,9 @@
+module mem test_mem_import_bad;
+import nonexistent;
+
+public routine main(): int64;
+begin
+  return 0;
+end;
+
+end.

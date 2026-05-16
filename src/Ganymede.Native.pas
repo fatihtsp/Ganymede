@@ -148,8 +148,10 @@ type
   public
 
     constructor Create(); reintroduce;
-
     destructor Destroy(); override;
+
+    // Override to propagate errors to child components
+    procedure SetErrors(const AErrors: TGnyErrors); override;
 
     //==========================================================================
     // Target Configuration
@@ -633,6 +635,17 @@ begin
   FIR.Free();
 
   inherited;
+end;
+
+procedure TGnyNativeBackend.SetErrors(const AErrors: TGnyErrors);
+begin
+  inherited SetErrors(AErrors);
+  if Assigned(FIR) then
+    FIR.SetErrors(FErrors);
+  if Assigned(FBackend) then
+    FBackend.SetErrors(FErrors);
+  //if Assigned(FRuntime) then
+  //  FRuntime.SetErrors(FErrors);
 end;
 
 procedure TGnyNativeBackend.ApplyPostBuildResources(const AExePath: string);

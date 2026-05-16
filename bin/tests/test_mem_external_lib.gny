@@ -1,0 +1,11 @@
+module mem test_mem_external_lib;
+
+public routine lib_add(a: int64; b: int64): int64;
+  external "test_lib_mathlib.lib";
+
+public routine main(): int64;
+begin
+  return test_lib_mathlib.lib_add(10, 20);
+end;
+
+end.

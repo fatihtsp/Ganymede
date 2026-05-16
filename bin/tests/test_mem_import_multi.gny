@@ -1,0 +1,9 @@
+module mem test_mem_import_multi;
+import test_lib_mathlib, test_lib_mathlib2;
+
+public routine main(): int64;
+begin
+  return test_lib_mathlib.lib_add(3, 4) + test_lib_mathlib2.lib_mul(5, 6);
+end;
+
+end.

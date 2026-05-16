@@ -46,7 +46,7 @@ uses
   Ganymede.Types in '..\src\Ganymede.Types.pas',
   Ganymede.Utils in '..\src\Ganymede.Utils.pas',
   UCommon in 'UCommon.pas',
-  UTest.Script.UnifyCompile in 'UTest.Script.UnifyCompile.pas';
+  UTest.Script.ImportClause in 'UTest.Script.ImportClause.pas';
 
 begin
   RunTestbed();

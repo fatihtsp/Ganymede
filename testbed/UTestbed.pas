@@ -27,8 +27,7 @@ uses
   UTest.Script.ControlFlow,
   UTest.Script.StringIO,
   UTest.Script.ImportHost,
-  UTest.Script.ImportLib,
-  UTest.Script.UnifyCompile;
+  UTest.Script.ImportClause;
 
 procedure Menu();
 var
@@ -57,10 +56,8 @@ begin
         procedure begin TGnyTestCase.Run(TScriptStringIOTest) end)
       .Add('Import Host',
         procedure begin TGnyTestCase.Run(TScriptImportHostTest) end)
-      .Add('Import Lib',
-        procedure begin TGnyTestCase.Run(TScriptImportLibTest) end)
-      .Add('Unified Compile',
-        procedure begin TGnyTestCase.Run(TScriptUnifyCompileTest) end);
+      .Add('Import Clause',
+        procedure begin TGnyTestCase.Run(TScriptImportClauseTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

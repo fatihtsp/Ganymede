@@ -1,0 +1,11 @@
+module mem test_mem_external_dll;
+
+public routine abs(x: int64): int64;
+  external "msvcrt";
+
+public routine main(): int64;
+begin
+  return abs(-42);
+end;
+
+end.

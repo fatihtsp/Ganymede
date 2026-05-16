@@ -1,0 +1,9 @@
+module mem test_mem_import_dll;
+import test_dll_crtlib;
+
+public routine main(): int64;
+begin
+  return test_dll_crtlib.abs(-42);
+end;
+
+end.

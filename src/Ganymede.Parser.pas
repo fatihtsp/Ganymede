@@ -97,6 +97,7 @@ type
 
     // Parsers — module structure
     function ParseModule(): Integer;
+    function ParseImportClause(): Integer;
     function ParseRoutineDecl(): Integer;
     function ParseParamList(): TArray<Integer>;
     function ParseTypeExpr(): string;
@@ -322,7 +323,13 @@ begin
     if LIsPublic then
       Advance();
 
-    if PeekKind() = tkRoutine then
+    if PeekKind() = tkImport then
+    begin
+      LDeclNode := ParseImportClause();
+      if LDeclNode >= 0 then
+        AddChild(LModNode, LDeclNode);
+    end
+    else if PeekKind() = tkRoutine then
     begin
       LDeclNode := ParseRoutineDecl();
       if (LDeclNode >= 0) and LIsPublic then
@@ -366,6 +373,42 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// Import clause: import ident {, ident} ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseImportClause(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LImportNode: Integer;
+  LNode: TGnyScriptNode;
+  LChildNode: Integer;
+begin
+  LTok := Expect(tkImport);
+  LImportNode := AddNode(nkImport, LTok.Range);
+
+  // First module name (stored in node Text)
+  LTok := Expect(tkIdent);
+  LNode := FNodes[LImportNode];
+  LNode.Text := LTok.Text;
+  FNodes[LImportNode] := LNode;
+
+  // Additional module names as child nkIdent nodes
+  while Match(tkComma) do
+  begin
+    LTok := Expect(tkIdent);
+    LChildNode := AddNode(nkIdent, LTok.Range);
+    LNode := FNodes[LChildNode];
+    LNode.Text := LTok.Text;
+    FNodes[LChildNode] := LNode;
+    AddChild(LImportNode, LChildNode);
+  end;
+
+  Expect(tkSemicolon);
+
+  Result := LImportNode;
+end;
+
+//------------------------------------------------------------------------------
 // Routine parsing
 //------------------------------------------------------------------------------
 
@@ -376,11 +419,23 @@ var
   LNode: TGnyScriptNode;
   LParams: TArray<Integer>;
   LBlockNode: Integer;
+  LLinkageNode: Integer;
   LI: Integer;
 begin
-  // routine ident ( params ) [ : ReturnType ] ;
+  // routine [ LinkageSpec ] ident ( params ) [ : ReturnType ] ;
   LTok := Expect(tkRoutine);
   LRoutNode := AddNode(nkRoutineDecl, LTok.Range);
+
+  // Optional linkage spec: cpplink
+  if PeekKind() = tkCppLink then
+  begin
+    LTok := Advance();
+    LLinkageNode := AddNode(nkDirective, LTok.Range);
+    LNode := FNodes[LLinkageNode];
+    LNode.Text := 'cpplink';
+    FNodes[LLinkageNode] := LNode;
+    AddChild(LRoutNode, LLinkageNode);
+  end;
 
   // Routine name
   LTok := Expect(tkIdent);
@@ -405,6 +460,32 @@ begin
   end;
 
   Expect(tkSemicolon);
+
+  // External declaration: external ["libname"] ;
+  if PeekKind() = tkExternal then
+  begin
+    LTok := Advance(); // consume 'external'
+    LBlockNode := AddNode(nkExternalDecl, LTok.Range);
+
+    // Optional library name (string literal or identifier)
+    if PeekKind() = tkStringLit then
+    begin
+      LNode := FNodes[LBlockNode];
+      LNode.Text := Advance().Text;
+      FNodes[LBlockNode] := LNode;
+    end
+    else if PeekKind() = tkIdent then
+    begin
+      LNode := FNodes[LBlockNode];
+      LNode.Text := Advance().Text;
+      FNodes[LBlockNode] := LNode;
+    end;
+
+    Expect(tkSemicolon);
+    AddChild(LRoutNode, LBlockNode);
+    Result := LRoutNode;
+    Exit;
+  end;
 
   // Optional var/const blocks before begin (interleaved, any order)
   while (not AtEnd()) and ((PeekKind() = tkVar) or (PeekKind() = tkConst)) do
@@ -998,6 +1079,8 @@ begin
     Result := BP_MULTIPLY
   else if AKind = tkLParen then
     Result := BP_POSTFIX  // function call
+  else if AKind = tkDot then
+    Result := BP_POSTFIX  // field access
   else
     Result := BP_NONE;
 end;
@@ -1134,6 +1217,18 @@ begin
 
       Expect(tkRParen);
       LLeft := LCallNode;
+    end
+    else if LTok.Kind = tkDot then
+    begin
+      // Field access: expr . ident
+      Advance(); // consume .
+      LTok := Expect(tkIdent);
+      LOpNode := AddNode(nkFieldAccess, LTok.Range);
+      LNode := FNodes[LOpNode];
+      LNode.Text := LTok.Text; // field name
+      FNodes[LOpNode] := LNode;
+      AddChild(LOpNode, LLeft); // object/module being accessed
+      LLeft := LOpNode;
     end
     else
     begin

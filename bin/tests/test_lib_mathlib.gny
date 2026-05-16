@@ -1,0 +1,8 @@
+module lib test_lib_mathlib;
+
+public routine lib_add(a: int64; b: int64): int64;
+begin
+  return a + b;
+end;
+
+end.

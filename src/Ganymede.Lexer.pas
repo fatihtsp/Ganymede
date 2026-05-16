@@ -72,6 +72,9 @@ type
     // Keywords — Contextual (module kind)
     tkExe, tkDll, tkLib, tkMem,
 
+    // Keywords — Linkage
+    tkCppLink,
+
     // Built-in type keywords
     tkInt8, tkInt16, tkInt32, tkInt64,
     tkUInt8, tkUInt16, tkUInt32, tkUInt64,
@@ -345,6 +348,9 @@ begin
   FKeywords.Add('dll', tkDll);
   FKeywords.Add('lib', tkLib);
   FKeywords.Add('mem', tkMem);
+
+  // Linkage
+  FKeywords.Add('cpplink', tkCppLink);
 
   // Built-in type keywords
   FKeywords.Add('int8', tkInt8);

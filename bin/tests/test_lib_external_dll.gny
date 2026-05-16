@@ -1,0 +1,11 @@
+module lib test_lib_external_dll;
+
+public routine abs(x: int64): int64;
+  external "msvcrt";
+
+public routine double_abs(x: int64): int64;
+begin
+  return abs(0 - x) * 2;
+end;
+
+end.

@@ -1,0 +1,9 @@
+module mem test_mem_import_lib_ext;
+import test_lib_mathlib_ext;
+
+public routine main(): int64;
+begin
+  return test_lib_mathlib_ext.lib_add(10, 20);
+end;
+
+end.
