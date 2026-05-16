@@ -28,7 +28,8 @@ uses
   UTest.Script.StringIO,
   UTest.Script.ImportHost,
   UTest.Script.ImportClause,
-  UTest.Script.MatchStmt;
+  UTest.Script.MatchStmt,
+  UTest.Script.Records;
 
 procedure Menu();
 var
@@ -60,7 +61,9 @@ begin
       .Add('Import Clause',
         procedure begin TGnyTestCase.Run(TScriptImportClauseTest) end)
       .Add('Match Statement',
-        procedure begin TGnyTestCase.Run(TScriptMatchStmtTest) end);
+        procedure begin TGnyTestCase.Run(TScriptMatchStmtTest) end)
+      .Add('Record Types',
+        procedure begin TGnyTestCase.Run(TScriptRecordsTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

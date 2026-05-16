@@ -1,0 +1,652 @@
+module mem test_mem_records;
+
+// ==========================================================================
+// Basic record — int32 fields, int32 return
+// ==========================================================================
+
+type
+  TPoint = record
+    x: int32;
+    y: int32;
+  end;
+
+public routine pointsum(): int32;
+var
+  p: TPoint;
+begin
+  p.x := 10;
+  p.y := 20;
+  return p.x + p.y;
+end;
+
+public routine pointlit(): int32;
+var
+  p: TPoint;
+begin
+  p := TPoint(x: 100, y: 200);
+  return p.x + p.y;
+end;
+
+// ==========================================================================
+// int8 fields, int8 return
+// ==========================================================================
+
+type
+  TByteRec = record
+    a: int8;
+    b: int8;
+    c: int8;
+  end;
+
+public routine byterec(): int8;
+var
+  r: TByteRec;
+begin
+  r.a := 10;
+  r.b := 20;
+  r.c := 30;
+  return r.a + r.b + r.c;
+end;
+
+// ==========================================================================
+// int16 fields, int16 return
+// ==========================================================================
+
+type
+  TShortRec = record
+    x: int16;
+    y: int16;
+  end;
+
+public routine shortrec(): int16;
+var
+  r: TShortRec;
+begin
+  r.x := 1000;
+  r.y := 2000;
+  return r.x + r.y;
+end;
+
+// ==========================================================================
+// int64 fields, int64 return
+// ==========================================================================
+
+type
+  TBigRec = record
+    lo: int64;
+    hi: int64;
+  end;
+
+public routine bigrec(): int64;
+var
+  r: TBigRec;
+begin
+  r.lo := 1000000000;
+  r.hi := 2000000000;
+  return r.lo + r.hi;
+end;
+
+// ==========================================================================
+// uint8 fields, uint8 return
+// ==========================================================================
+
+type
+  TU8Rec = record
+    a: uint8;
+    b: uint8;
+  end;
+
+public routine u8rec(): uint8;
+var
+  r: TU8Rec;
+begin
+  r.a := 100;
+  r.b := 150;
+  return r.a + r.b;
+end;
+
+// ==========================================================================
+// uint16 fields, uint16 return
+// ==========================================================================
+
+type
+  TU16Rec = record
+    a: uint16;
+    b: uint16;
+  end;
+
+public routine u16rec(): uint16;
+var
+  r: TU16Rec;
+begin
+  r.a := 30000;
+  r.b := 20000;
+  return r.a + r.b;
+end;
+
+// ==========================================================================
+// uint32 fields, uint32 return
+// ==========================================================================
+
+type
+  TU32Rec = record
+    a: uint32;
+    b: uint32;
+  end;
+
+public routine u32rec(): uint32;
+var
+  r: TU32Rec;
+begin
+  r.a := 100000;
+  r.b := 200000;
+  return r.a + r.b;
+end;
+
+// ==========================================================================
+// float32 fields, float32 return
+// ==========================================================================
+
+type
+  TColor = record
+    r: float32;
+    g: float32;
+    b: float32;
+    a: float32;
+  end;
+
+public routine colorsum(): float32;
+var
+  c: TColor;
+begin
+  c.r := 0.25;
+  c.g := 0.50;
+  c.b := 0.75;
+  c.a := 1.0;
+  return c.r + c.g + c.b + c.a;
+end;
+
+// ==========================================================================
+// float64 fields, float64 return
+// ==========================================================================
+
+type
+  TVector2D = record
+    x: float64;
+    y: float64;
+  end;
+
+public routine vec2dot(): float64;
+var
+  v: TVector2D;
+begin
+  v.x := 3.0;
+  v.y := 4.0;
+  return v.x * v.x + v.y * v.y;
+end;
+
+// ==========================================================================
+// boolean fields, boolean return
+// ==========================================================================
+
+type
+  TFlags = record
+    active: boolean;
+    visible: boolean;
+    enabled: boolean;
+  end;
+
+public routine flagand(): boolean;
+var
+  f: TFlags;
+begin
+  f.active := true;
+  f.visible := true;
+  f.enabled := true;
+  return f.active and f.visible and f.enabled;
+end;
+
+public routine flagor(): boolean;
+var
+  f: TFlags;
+begin
+  f.active := false;
+  f.visible := true;
+  f.enabled := false;
+  return f.active or f.visible or f.enabled;
+end;
+
+public routine flagfalse(): boolean;
+var
+  f: TFlags;
+begin
+  f.active := false;
+  f.visible := false;
+  f.enabled := false;
+  return f.active or f.visible or f.enabled;
+end;
+
+// ==========================================================================
+// char fields, char return
+// ==========================================================================
+
+type
+  TCharPair = record
+    first: char;
+    second: char;
+  end;
+
+public routine charfield(): char;
+var
+  cp: TCharPair;
+begin
+  cp.first := "A";
+  cp.second := "Z";
+  return cp.first;
+end;
+
+// ==========================================================================
+// wchar fields, wchar return
+// ==========================================================================
+
+type
+  TWCharPair = record
+    first: wchar;
+    second: wchar;
+  end;
+
+public routine wcharfield(): wchar;
+var
+  wp: TWCharPair;
+begin
+  wp.first := w"X";
+  wp.second := w"Y";
+  return wp.second;
+end;
+
+// ==========================================================================
+// Packed record — mixed small types, int32 return
+// ==========================================================================
+
+type
+  TPacked = record packed
+    a: int8;
+    b: int32;
+    c: int8;
+  end;
+
+public routine packedrec(): int32;
+var
+  p: TPacked;
+begin
+  p.a := 1;
+  p.b := 1000;
+  p.c := 2;
+  return p.a + p.b + p.c;
+end;
+
+// Packed with unsigned types, uint32 return
+type
+  TPackedU = record packed
+    a: uint8;
+    b: uint16;
+    c: uint32;
+  end;
+
+public routine packedunsigned(): uint32;
+var
+  p: TPackedU;
+begin
+  p.a := 200;
+  p.b := 40000;
+  p.c := 80000;
+  return p.a + p.b + p.c;
+end;
+
+// ==========================================================================
+// Aligned record — float64 fields, float64 return
+// ==========================================================================
+
+type
+  TAligned = record align(16)
+    x: float64;
+    y: float64;
+  end;
+
+public routine alignedrec(): float64;
+var
+  a: TAligned;
+begin
+  a.x := 50.5;
+  a.y := 60.5;
+  return a.x + a.y;
+end;
+
+// ==========================================================================
+// Packed + Aligned — int16 return
+// ==========================================================================
+
+type
+  TPackedAligned = record packed align(8)
+    a: int8;
+    b: int16;
+    c: int32;
+  end;
+
+public routine packedaligned(): int16;
+var
+  pa: TPackedAligned;
+begin
+  pa.a := 10;
+  pa.b := 200;
+  pa.c := 3000;
+  // Truncates to int16 range — 3210 fits in int16
+  return pa.a + pa.b + pa.c;
+end;
+
+// ==========================================================================
+// Nested records — deep field access, int32 return
+// ==========================================================================
+
+type
+  TLine = record
+    start: TPoint;
+    finish: TPoint;
+  end;
+
+public routine nestedrec(): int32;
+var
+  ln: TLine;
+begin
+  ln.start.x := 1;
+  ln.start.y := 2;
+  ln.finish.x := 10;
+  ln.finish.y := 20;
+  return ln.start.x + ln.start.y + ln.finish.x + ln.finish.y;
+end;
+
+// Nested record literal assignment
+public routine nestedlit(): int32;
+var
+  ln: TLine;
+begin
+  ln.start := TPoint(x: 5, y: 6);
+  ln.finish := TPoint(x: 50, y: 60);
+  return ln.start.x + ln.finish.y;
+end;
+
+// ==========================================================================
+// Record inheritance — int64 base, mixed derived, int64 return
+// ==========================================================================
+
+type
+  TBase = record
+    id: int64;
+  end;
+
+type
+  TDerived = record(TBase)
+    value: int32;
+    ratio: float64;
+  end;
+
+public routine inheritance(): int64;
+var
+  d: TDerived;
+begin
+  d.id := 100;
+  d.value := 200;
+  d.ratio := 1.5;
+  return d.id + d.value;
+end;
+
+// ==========================================================================
+// String fields in records
+// ==========================================================================
+
+type
+  TNamedValue = record
+    label: string;
+    amount: int32;
+  end;
+
+// String field compare — returns boolean
+public routine stringfieldcmp(): boolean;
+var
+  nv: TNamedValue;
+begin
+  nv.label := "hello";
+  nv.amount := 42;
+  return nv.label = "hello";
+end;
+
+// String field — return the int field to verify struct layout
+public routine stringfieldint(): int32;
+var
+  nv: TNamedValue;
+begin
+  nv.label := "testing";
+  nv.amount := 77;
+  return nv.amount;
+end;
+
+// Two string fields
+type
+  TPersonName = record
+    first: string;
+    last: string;
+    age: int32;
+  end;
+
+public routine twostringfields(): boolean;
+var
+  p: TPersonName;
+begin
+  p.first := "John";
+  p.last := "Doe";
+  p.age := 30;
+  return (p.first = "John") and (p.last = "Doe");
+end;
+
+// String field concatenation — returns boolean
+public routine stringfieldconcat(): boolean;
+var
+  nv: TNamedValue;
+begin
+  nv.label := "hel";
+  nv.label := nv.label + "lo";
+  return nv.label = "hello";
+end;
+
+// ==========================================================================
+// wstring field — wstring return would need runtime; use int32 for code
+// ==========================================================================
+
+type
+  TWideRec = record
+    text: wstring;
+    code: int32;
+  end;
+
+public routine wstringfield(): int32;
+var
+  wr: TWideRec;
+begin
+  wr.text := w"wide";
+  wr.code := 99;
+  return wr.code;
+end;
+
+// ==========================================================================
+// Field passing — pass fields of various types to routines
+// ==========================================================================
+
+public routine addints(a: int32; b: int32): int32;
+begin
+  return a + b;
+end;
+
+public routine addfloats(a: float64; b: float64): float64;
+begin
+  return a + b;
+end;
+
+public routine addi64(a: int64; b: int64): int64;
+begin
+  return a + b;
+end;
+
+public routine fieldpassint(): int32;
+var
+  p: TPoint;
+begin
+  p.x := 42;
+  p.y := 58;
+  return addints(p.x, p.y);
+end;
+
+public routine fieldpassfloat(): float64;
+var
+  v: TVector2D;
+begin
+  v.x := 1.5;
+  v.y := 2.5;
+  return addfloats(v.x, v.y);
+end;
+
+public routine fieldpassi64(): int64;
+var
+  r: TBigRec;
+begin
+  r.lo := 111111111;
+  r.hi := 222222222;
+  return addi64(r.lo, r.hi);
+end;
+
+// ==========================================================================
+// Record literals with various types
+// ==========================================================================
+
+public routine veclit(): float64;
+var
+  v: TVector2D;
+begin
+  v := TVector2D(x: 7.0, y: 8.0);
+  return v.x + v.y;
+end;
+
+public routine bytelit(): int8;
+var
+  r: TByteRec;
+begin
+  r := TByteRec(a: 5, b: 10, c: 15);
+  return r.a + r.b + r.c;
+end;
+
+public routine biglit(): int64;
+var
+  r: TBigRec;
+begin
+  r := TBigRec(lo: 999999999, hi: 1);
+  return r.lo + r.hi;
+end;
+
+// ==========================================================================
+// Field overwrite — float64
+// ==========================================================================
+
+public routine floatoverwrite(): float64;
+var
+  v: TVector2D;
+begin
+  v.x := 1.0;
+  v.x := 99.5;
+  return v.x;
+end;
+
+// ==========================================================================
+// Literal then overwrite — int32
+// ==========================================================================
+
+public routine litoverwrite(): int32;
+var
+  p: TPoint;
+begin
+  p := TPoint(x: 10, y: 20);
+  p.x := 55;
+  return p.x + p.y;
+end;
+
+// ==========================================================================
+// Multiple record vars of different types in same routine — int64 return
+// ==========================================================================
+
+public routine multivar(): int64;
+var
+  pt: TPoint;
+  v: TVector2D;
+  f: TFlags;
+  big: TBigRec;
+  r: int64;
+begin
+  pt.x := 1;
+  pt.y := 2;
+  v.x := 10.0;
+  v.y := 20.0;
+  f.active := true;
+  f.visible := false;
+  f.enabled := true;
+  big.lo := 1000;
+  big.hi := 2000;
+  r := pt.x + pt.y + big.lo + big.hi;
+  if f.active and f.enabled then
+    r := r + 100;
+  end;
+  return r;
+end;
+
+// ==========================================================================
+// Kitchen sink — every primitive type in one record, int64 return
+// ==========================================================================
+
+type
+  TKitchenSink = record
+    b: int8;
+    s: int16;
+    i: int32;
+    l: int64;
+    ub: uint8;
+    us: uint16;
+    ui: uint32;
+    f: float32;
+    d: float64;
+    flag: boolean;
+    ch: char;
+  end;
+
+public routine kitchensink(): int64;
+var
+  k: TKitchenSink;
+  r: int64;
+begin
+  k.b := 1;
+  k.s := 2;
+  k.i := 3;
+  k.l := 4;
+  k.ub := 5;
+  k.us := 6;
+  k.ui := 7;
+  k.f := 8.0;
+  k.d := 9.0;
+  k.flag := true;
+  k.ch := "!";
+  // 1+2+3+4+5+6+7 = 28, flag=1 → 29, '!'=33 → 62
+  r := k.b + k.s + k.i + k.l + k.ub + k.us + k.ui;
+  if k.flag then
+    r := r + 1;
+  end;
+  r := r + k.ch;
+  return r;
+end;
+
+end.

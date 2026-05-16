@@ -1805,6 +1805,9 @@ var
     begin
       if AOp.LocalHandle.IsParam then
         EmitLeaRegRbpDisp(AReg, GetParamOffset(AOp.LocalHandle.Index))
+      else if LFunc.Locals[AOp.LocalHandle.Index].LocalSize > 8 then
+        EmitLeaRegRbpDisp(AReg, GetLocalOffset(AOp.LocalHandle.Index)
+          - LFunc.Locals[AOp.LocalHandle.Index].LocalSize + 8)
       else
         EmitLeaRegRbpDisp(AReg, GetLocalOffset(AOp.LocalHandle.Index));
     end
@@ -2206,7 +2209,7 @@ begin
       LOutgoingArgSpace := Cardinal(LMaxCallArgs) * 8;
 
       if LFunc.IsVariadic then
-        LStackFrameSize := 40 + LOutgoingArgSpace + Cardinal(4 * 8) + Cardinal(LLocalsSize) + Cardinal(LFunc.TempCount * 8)  // Always 4 slots for variadic
+        LStackFrameSize := 40 + LOutgoingArgSpace + Cardinal(4 * 8) + Cardinal(LLocalsSize) + Cardinal(LFunc.TempCount * 8)
       else
         LStackFrameSize := 40 + LOutgoingArgSpace + Cardinal(Length(LFunc.Params) * 8) + Cardinal(LLocalsSize) + Cardinal(LFunc.TempCount * 8);
       if (LStackFrameSize mod 16) <> 0 then
@@ -2274,6 +2277,18 @@ begin
           // Record fixup: displacement is at offset 1 from current position
           LCallFixups.Add(TPair<Cardinal, Integer>.Create(LTextSection.Size + 1, LInitExceptionsIndex));
           EmitCallRel32(0);  // Placeholder displacement
+        end;
+      end;
+
+      // Zero-initialize composite locals (size > 8) to prevent garbage
+      // pointer dereferences when struct fields are read before first assignment
+      for LJ := 0 to High(LFunc.Locals) do
+      begin
+        if LFunc.Locals[LJ].LocalSize > 8 then
+        begin
+          EmitXorRegReg(REG_RAX);
+          for LK := 0 to (LFunc.Locals[LJ].LocalSize div 8) - 1 do
+            EmitMovRbpDispReg(GetLocalOffset(LJ) - LFunc.Locals[LJ].LocalSize + 8 + LK * 8, REG_RAX);
         end;
       end;
 
@@ -2503,12 +2518,19 @@ begin
             begin
               // Dest = address of local/param slot (always LEA)
               // Op1 = local handle
-              // Note: For by-ref params (structs >8 bytes), the caller should emit
-              // a subsequent load instruction to get the actual struct pointer.
               if LInstr.Op1.LocalHandle.IsParam then
                 EmitLeaRegRbpDisp(REG_RAX, GetParamOffset(LInstr.Op1.LocalHandle.Index))
               else
-                EmitLeaRegRbpDisp(REG_RAX, GetLocalOffset(LInstr.Op1.LocalHandle.Index));
+              begin
+                // For composite locals (>8 bytes), shift the base address down
+                // by (localSize - 8) so struct fields extending upward via
+                // positive offsets stay within the allocated slot.
+                if LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize > 8 then
+                  EmitLeaRegRbpDisp(REG_RAX, GetLocalOffset(LInstr.Op1.LocalHandle.Index)
+                    - LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize + 8)
+                else
+                  EmitLeaRegRbpDisp(REG_RAX, GetLocalOffset(LInstr.Op1.LocalHandle.Index));
+              end;
               StoreTempFromReg(LInstr.Dest.Index, REG_RAX);
             end;
 
@@ -2987,6 +3009,9 @@ begin
                 begin
                   if LInstr.Op1.LocalHandle.IsParam then
                     EmitLeaRegRbpDisp(REG_RSI, GetParamOffset(LInstr.Op1.LocalHandle.Index))
+                  else if LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize > 8 then
+                    EmitLeaRegRbpDisp(REG_RSI, GetLocalOffset(LInstr.Op1.LocalHandle.Index)
+                      - LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize + 8)
                   else
                     EmitLeaRegRbpDisp(REG_RSI, GetLocalOffset(LInstr.Op1.LocalHandle.Index));
                 end
@@ -5150,6 +5175,9 @@ var
     begin
       if AOp.LocalHandle.IsParam then
         EmitLeaRegRbpDisp(AReg, GetParamOffset(AOp.LocalHandle.Index))
+      else if LFunc.Locals[AOp.LocalHandle.Index].LocalSize > 8 then
+        EmitLeaRegRbpDisp(AReg, GetLocalOffset(AOp.LocalHandle.Index)
+          - LFunc.Locals[AOp.LocalHandle.Index].LocalSize + 8)
       else
         EmitLeaRegRbpDisp(AReg, GetLocalOffset(AOp.LocalHandle.Index));
     end
@@ -5547,6 +5575,18 @@ begin
         end;
       end;
 
+      // Zero-initialize composite locals (size > 8) to prevent garbage
+      // pointer dereferences when struct fields are read before first assignment
+      for LJ := 0 to High(LFunc.Locals) do
+      begin
+        if LFunc.Locals[LJ].LocalSize > 8 then
+        begin
+          EmitXorRegReg(REG_RAX);
+          for LK := 0 to (LFunc.Locals[LJ].LocalSize div 8) - 1 do
+            EmitMovRbpDispReg(GetLocalOffset(LJ) - LFunc.Locals[LJ].LocalSize + 8 + LK * 8, REG_RAX);
+        end;
+      end;
+
       // Process each instruction
       for LJ := 0 to High(LFunc.Instructions) do
       begin
@@ -5743,12 +5783,19 @@ begin
             begin
               // Dest = address of local/param slot (always LEA)
               // Op1 = local handle
-              // Note: For by-ref params (structs >8 bytes), the caller should emit
-              // a subsequent load instruction to get the actual struct pointer.
               if LInstr.Op1.LocalHandle.IsParam then
                 EmitLeaRegRbpDisp(REG_RAX, GetParamOffset(LInstr.Op1.LocalHandle.Index))
               else
-                EmitLeaRegRbpDisp(REG_RAX, GetLocalOffset(LInstr.Op1.LocalHandle.Index));
+              begin
+                // For composite locals (>8 bytes), shift the base address down
+                // by (localSize - 8) so struct fields extending upward via
+                // positive offsets stay within the allocated slot.
+                if LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize > 8 then
+                  EmitLeaRegRbpDisp(REG_RAX, GetLocalOffset(LInstr.Op1.LocalHandle.Index)
+                    - LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize + 8)
+                else
+                  EmitLeaRegRbpDisp(REG_RAX, GetLocalOffset(LInstr.Op1.LocalHandle.Index));
+              end;
               StoreTempFromReg(LInstr.Dest.Index, REG_RAX);
             end;
 
@@ -6145,6 +6192,9 @@ begin
                 begin
                   if LInstr.Op1.LocalHandle.IsParam then
                     EmitLeaRegRbpDisp(REG_RSI, GetParamOffset(LInstr.Op1.LocalHandle.Index))
+                  else if LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize > 8 then
+                    EmitLeaRegRbpDisp(REG_RSI, GetLocalOffset(LInstr.Op1.LocalHandle.Index)
+                      - LFunc.Locals[LInstr.Op1.LocalHandle.Index].LocalSize + 8)
                   else
                     EmitLeaRegRbpDisp(REG_RSI, GetLocalOffset(LInstr.Op1.LocalHandle.Index));
                 end

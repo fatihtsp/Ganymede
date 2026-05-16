@@ -47,6 +47,7 @@ type
     // AST walkers
     procedure EmitModule(const AIndex: Integer);
     procedure EmitRoutineDecl(const AIndex: Integer);
+    procedure EmitTypeDecl(const AIndex: Integer);
     procedure EmitBlock(const AIndex: Integer);
     procedure EmitStatement(const AIndex: Integer);
     procedure EmitIf(const AIndex: Integer);
@@ -119,6 +120,10 @@ begin
     Result := gvtFloat64
   else if ATypeName = 'boolean' then
     Result := gvtInt8  // boolean maps to int8 (0/1); backend Bool() creates these
+  else if ATypeName = 'char' then
+    Result := gvtInt8  // 8-bit character
+  else if ATypeName = 'wchar' then
+    Result := gvtInt16 // 16-bit wide character
   else if ATypeName = 'string' then
     Result := gvtPointer  // managed UTF-8 string (pointer to TStringRec)
   else if ATypeName = 'wstring' then
@@ -272,6 +277,8 @@ begin
         FBackend.Global(LChild.Text, ResolveValueType(LChild.Extra),
           EmitExpr(LChild.Children[0]));
     end
+    else if LChild.Kind = nkTypeDecl then
+      EmitTypeDecl(LNode.Children[LI])
     else if LChild.Kind = nkBlock then
       EmitBlock(LNode.Children[LI]);
   end;
@@ -308,6 +315,14 @@ begin
       FBackend.Arg(LChild.Text, ResolveValueType(LChild.Extra));
   end;
 
+  // Emit type declarations first (records must be defined before use)
+  for LI := 0 to Length(LNode.Children) - 1 do
+  begin
+    LChild := FNodes[LNode.Children[LI]];
+    if LChild.Kind = nkTypeDecl then
+      EmitTypeDecl(LNode.Children[LI]);
+  end;
+
   // Emit local variable and constant declarations
   for LI := 0 to Length(LNode.Children) - 1 do
   begin
@@ -327,6 +342,61 @@ begin
   end;
 
   FBackend.EndFunc();
+end;
+
+procedure TGnyScriptEmitter.EmitTypeDecl(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LRecNode: TGnyScriptNode;
+  LFieldNode: TGnyScriptNode;
+  LTypeName: string;
+  LIsPacked: Boolean;
+  LExplicitAlign: Integer;
+  LBaseType: string;
+  LExtra: string;
+  LAlignPos: Integer;
+  LI: Integer;
+begin
+  LNode := FNodes[AIndex];
+  LTypeName := LNode.Text;
+
+  // Only record types supported for now
+  if (Length(LNode.Children) = 0) or
+     (FNodes[LNode.Children[0]].Kind <> nkRecordType) then
+    Exit;
+
+  LRecNode := FNodes[LNode.Children[0]];
+
+  // Parse record flags from Extra: "packed", "align=N", or "packed,align=N"
+  LExtra := LRecNode.Extra;
+  LIsPacked := LExtra.Contains('packed');
+  LExplicitAlign := 0;
+  LAlignPos := LExtra.IndexOf('align=');
+  if LAlignPos >= 0 then
+    LExplicitAlign := StrToIntDef(
+      LExtra.Substring(LAlignPos + 6).Split([','])[0], 0);
+
+  // Base type from record node Text (set by parser for inheritance)
+  LBaseType := LRecNode.Text;
+
+  // Define the record on the backend
+  FBackend.DefineRecord(LTypeName, LIsPacked, LExplicitAlign, LBaseType);
+
+  // Emit fields
+  for LI := 0 to Length(LRecNode.Children) - 1 do
+  begin
+    LFieldNode := FNodes[LRecNode.Children[LI]];
+    if LFieldNode.Kind = nkFieldDecl then
+    begin
+      // Try primitive type first, fall back to named type
+      if ResolveValueType(LFieldNode.Extra) <> gvtVoid then
+        FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
+      else
+        FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+    end;
+  end;
+
+  FBackend.EndRecord();
 end;
 
 procedure TGnyScriptEmitter.EmitBlock(const AIndex: Integer);
@@ -730,7 +800,11 @@ begin
   //----------------------------------------------------------------------------
   // Non-string variable — existing path
   //----------------------------------------------------------------------------
-  FBackend.VarDecl(LNode.Text, ResolveValueType(LNode.Extra));
+  // Record-typed variables use the string overload of VarDecl
+  if ResolveValueType(LNode.Extra) = gvtVoid then
+    FBackend.VarDecl(LNode.Text, LNode.Extra)
+  else
+    FBackend.VarDecl(LNode.Text, ResolveValueType(LNode.Extra));
 
   // If initializer present (child[0]), emit assignment
   if Length(LNode.Children) > 0 then
@@ -777,6 +851,7 @@ var
   LConcatExpr: TGnyExpr;
   LOp: string;
   LLhsFloat: Boolean;
+  LI: Integer;
   LRhsFloat: Boolean;
 
   // Recursive float type check matching EmitExpr.ChildIsFloat
@@ -808,7 +883,70 @@ begin
   LOp := LNode.Text;
 
   //----------------------------------------------------------------------------
-  // Managed string assignment
+  // Record field assignment — rec.field := value (must be FIRST)
+  //----------------------------------------------------------------------------
+  if LLhsNode.Kind = nkFieldAccess then
+  begin
+    if (LOp = ':=') and (Length(LLhsNode.Children) > 0) then
+    begin
+      LRhsNode := FNodes[LNode.Children[1]];
+
+      // String-typed field — use StrAssign for atomic refcount management
+      // (SetVal triggers backend auto-release that corrupts the new value)
+      if LLhsNode.Extra = 'string' then
+      begin
+        if LRhsNode.Kind = nkStringLit then
+        begin
+          // Create managed string from literal, assign via StrAssign, release temp
+          LRhsExpr := FBackend.Invoke('Gny_StrFromLiteral',
+            [FBackend.Str(LRhsNode.Text),
+             FBackend.Int64(Length(LRhsNode.Text))]);
+          FBackend.Call('Gny_StrAssign',
+            [FBackend.AddrOfVal(
+               FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text)),
+             LRhsExpr]);
+          FBackend.Call('Gny_StrRelease', [LRhsExpr]);
+        end
+        else
+        begin
+          // General expression (concat, ident, etc.) — StrAssign handles refcounting
+          LRhsExpr := EmitExpr(LNode.Children[1]);
+          FBackend.Call('Gny_StrAssign',
+            [FBackend.AddrOfVal(
+               FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text)),
+             LRhsExpr]);
+        end;
+      end
+      // Char field + string literal → emit ordinal value
+      else if (LRhsNode.Kind = nkStringLit) and (Length(LRhsNode.Text) = 1) and
+              (LLhsNode.Extra = 'char') then
+      begin
+        FBackend.SetVal(
+          FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text),
+          FBackend.Int8(Int8(Ord(LRhsNode.Text[1]))));
+      end
+      // Wchar field + wstring literal → emit ordinal value
+      else if (LRhsNode.Kind = nkWStringLit) and (Length(LRhsNode.Text) = 1) and
+              (LLhsNode.Extra = 'wchar') then
+      begin
+        FBackend.SetVal(
+          FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text),
+          FBackend.Int16(Int16(Ord(LRhsNode.Text[1]))));
+      end
+      else
+      begin
+        // Default: emit RHS and store to field
+        LRhsExpr := EmitExpr(LNode.Children[1]);
+        FBackend.SetVal(
+          FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text),
+          LRhsExpr);
+      end;
+    end;
+    Exit;
+  end;
+
+  //----------------------------------------------------------------------------
+  // Managed string assignment (standalone variable, not field access)
   //----------------------------------------------------------------------------
   if LLhsNode.Extra = 'string' then
   begin
@@ -888,11 +1026,33 @@ begin
   // For simple assignment, emit directly
   if LOp = ':=' then
   begin
-    LRhsExpr := EmitExpr(LNode.Children[1]);
-    // Promote int→float when assigning integer to float variable
-    if LLhsFloat and (not LRhsFloat) then
-      LRhsExpr := FBackend.IntToFloat64(LRhsExpr);
-    FBackend.Let(LLhsNode.Text, LRhsExpr);
+    LRhsNode := FNodes[LNode.Children[1]];
+
+    // Record literal RHS — emit field-by-field directly into LHS variable
+    // (avoids temp var + struct copy which fails for structs > 8 bytes)
+    if LRhsNode.Kind = nkRecordLiteral then
+    begin
+      for LI := 0 to Length(LRhsNode.Children) - 1 do
+      begin
+        if (FNodes[LRhsNode.Children[LI]].Kind = nkFieldInit) and
+           (Length(FNodes[LRhsNode.Children[LI]].Children) > 0) then
+        begin
+          LRhsExpr := EmitExpr(FNodes[LRhsNode.Children[LI]].Children[0]);
+          FBackend.SetVal(
+            FBackend.GetField(FBackend.Get(LLhsNode.Text),
+              FNodes[LRhsNode.Children[LI]].Text),
+            LRhsExpr);
+        end;
+      end;
+    end
+    else
+    begin
+      LRhsExpr := EmitExpr(LNode.Children[1]);
+      // Promote int→float when assigning integer to float variable
+      if LLhsFloat and (not LRhsFloat) then
+        LRhsExpr := FBackend.IntToFloat64(LRhsExpr);
+      FBackend.Let(LLhsNode.Text, LRhsExpr);
+    end;
   end
   else
   begin
@@ -945,6 +1105,8 @@ var
   LArgs: TArray<TGnyExpr>;
   LCallee: TGnyScriptNode;
   LFuncName: string;
+  LTempName: string;
+  LFieldInitNode: TGnyScriptNode;
   LI: Integer;
   LIsFloat: Boolean;
   LLeftFloat: Boolean;
@@ -1005,6 +1167,10 @@ begin
   // String literal
   else if LNode.Kind = nkStringLit then
     Result := FBackend.Str(LNode.Text)
+
+  // Wide string literal
+  else if LNode.Kind = nkWStringLit then
+    Result := FBackend.WStr(LNode.Text)
 
   // Boolean literal
   else if LNode.Kind = nkBoolLit then
@@ -1249,6 +1415,42 @@ begin
         Result := FBackend.Invoke(LFuncName, LArgs);
       end;
     end;
+  end
+
+  // Field access — record.field
+  else if LNode.Kind = nkFieldAccess then
+  begin
+    // children[0] = LHS expression (record variable), Text = field name
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeft := EmitExpr(LNode.Children[0]);
+      Result := FBackend.GetField(LLeft, LNode.Text);
+    end;
+  end
+
+  // Record literal — TypeName(field1: val1, field2: val2, ...)
+  else if LNode.Kind = nkRecordLiteral then
+  begin
+    // Declare a temp variable of the record type, set each field, return it
+    LTempName := Format('__r%d', [FTempIndex]);
+    Inc(FTempIndex);
+    FBackend.VarDecl(LTempName, LNode.Text);
+
+    // Set each field from the initializer list
+    for LI := 0 to Length(LNode.Children) - 1 do
+    begin
+      LFieldInitNode := FNodes[LNode.Children[LI]];
+      if (LFieldInitNode.Kind = nkFieldInit) and
+         (Length(LFieldInitNode.Children) > 0) then
+      begin
+        LRight := EmitExpr(LFieldInitNode.Children[0]);
+        FBackend.SetVal(
+          FBackend.GetField(FBackend.Get(LTempName), LFieldInitNode.Text),
+          LRight);
+      end;
+    end;
+
+    Result := FBackend.Get(LTempName);
   end;
 end;
 

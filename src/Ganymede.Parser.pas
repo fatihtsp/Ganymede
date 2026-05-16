@@ -116,6 +116,8 @@ type
     function ParseWriteStatement(): Integer;
     function ParseVarBlock(const AParentNode: Integer): Integer;
     function ParseConstBlock(const AParentNode: Integer): Integer;
+    function ParseTypeBlock(const AParentNode: Integer): Integer;
+    function ParseRecordType(): Integer;
     function TryParseAssign(const ALhs: Integer): Integer;
 
     // Parsers — expressions (Pratt)
@@ -350,6 +352,10 @@ begin
     begin
       ParseConstBlock(LModNode);
     end
+    else if PeekKind() = tkType then
+    begin
+      ParseTypeBlock(LModNode);
+    end
     else
     begin
       FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
@@ -488,13 +494,16 @@ begin
     Exit;
   end;
 
-  // Optional var/const blocks before begin (interleaved, any order)
-  while (not AtEnd()) and ((PeekKind() = tkVar) or (PeekKind() = tkConst)) do
+  // Optional type/var/const blocks before begin (interleaved, any order)
+  while (not AtEnd()) and ((PeekKind() = tkVar) or (PeekKind() = tkConst) or
+    (PeekKind() = tkType)) do
   begin
     if PeekKind() = tkVar then
       ParseVarBlock(LRoutNode)
+    else if PeekKind() = tkConst then
+      ParseConstBlock(LRoutNode)
     else
-      ParseConstBlock(LRoutNode);
+      ParseTypeBlock(LRoutNode);
   end;
 
   // Routine body: begin ... end ;
@@ -1164,6 +1173,127 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// Type block: type { ident = RecordType ; }
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseTypeBlock(const AParentNode: Integer): Integer;
+var
+  LNameTok: TGnyScriptToken;
+  LTypeDeclNode: Integer;
+  LNode: TGnyScriptNode;
+  LTypeDefNode: Integer;
+begin
+  Expect(tkType);
+  Result := 0;
+
+  // Parse type declarations until we hit something that isn't an identifier
+  while (not AtEnd()) and (PeekKind() = tkIdent) do
+  begin
+    LNameTok := Expect(tkIdent);
+    LTypeDeclNode := AddNode(nkTypeDecl, LNameTok.Range);
+    LNode := FNodes[LTypeDeclNode];
+    LNode.Text := LNameTok.Text;
+    FNodes[LTypeDeclNode] := LNode;
+
+    // = TypeDef
+    Expect(tkEq);
+
+    // Currently only record types are supported
+    if PeekKind() = tkRecord then
+    begin
+      LTypeDefNode := ParseRecordType();
+      if LTypeDefNode >= 0 then
+        AddChild(LTypeDeclNode, LTypeDefNode);
+    end
+    else
+    begin
+      FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
+        RSScriptUnexpectedToken, [Peek().Text]);
+      Advance();
+    end;
+
+    Expect(tkSemicolon);
+    AddChild(AParentNode, LTypeDeclNode);
+    Inc(Result);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// Record type: record [packed] [align(N)] [(BaseType)] { FieldDecl } end
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseRecordType(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LRecNode: Integer;
+  LNode: TGnyScriptNode;
+  LFieldNode: Integer;
+  LFieldNameTok: TGnyScriptToken;
+begin
+  LTok := Expect(tkRecord);
+  LRecNode := AddNode(nkRecordType, LTok.Range);
+
+  // Optional 'packed'
+  if PeekKind() = tkPacked then
+  begin
+    Advance();
+    LNode := FNodes[LRecNode];
+    LNode.Extra := 'packed';
+    FNodes[LRecNode] := LNode;
+  end;
+
+  // Optional 'align(N)'
+  if PeekKind() = tkAlign then
+  begin
+    Advance();
+    Expect(tkLParen);
+    LTok := Expect(tkIntLit);
+    // Store alignment in Text (Extra may already hold 'packed')
+    LNode := FNodes[LRecNode];
+    if LNode.Extra <> '' then
+      LNode.Extra := LNode.Extra + ',align=' + LTok.Text
+    else
+      LNode.Extra := 'align=' + LTok.Text;
+    FNodes[LRecNode] := LNode;
+    Expect(tkRParen);
+  end;
+
+  // Optional inheritance: (BaseType)
+  if PeekKind() = tkLParen then
+  begin
+    Advance();
+    LTok := Expect(tkIdent);
+    LNode := FNodes[LRecNode];
+    LNode.Text := LTok.Text; // base type name stored in Text
+    FNodes[LRecNode] := LNode;
+    Expect(tkRParen);
+  end;
+
+  // Parse field declarations until 'end'
+  while (not AtEnd()) and (PeekKind() <> tkEnd) do
+  begin
+    LFieldNameTok := Expect(tkIdent);
+    LFieldNode := AddNode(nkFieldDecl, LFieldNameTok.Range);
+    LNode := FNodes[LFieldNode];
+    LNode.Text := LFieldNameTok.Text;
+    FNodes[LFieldNode] := LNode;
+
+    Expect(tkColon);
+
+    LNode := FNodes[LFieldNode];
+    LNode.Extra := ParseTypeExpr();
+    FNodes[LFieldNode] := LNode;
+
+    Expect(tkSemicolon);
+    AddChild(LRecNode, LFieldNode);
+  end;
+
+  Expect(tkEnd);
+
+  Result := LRecNode;
+end;
+
+//------------------------------------------------------------------------------
 // Assignment: Designator ( := | += | -= | *= | /= ) Expression
 //------------------------------------------------------------------------------
 
@@ -1231,6 +1361,7 @@ var
   LOpNode: Integer;
   LCallNode: Integer;
   LArgNode: Integer;
+  LFieldInitNode: Integer;
   LBP: Integer;
 begin
   // --- NUD: prefix / atoms ---
@@ -1271,6 +1402,16 @@ begin
   begin
     Advance();
     LLeft := AddNode(nkStringLit, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+  end
+
+  // Wide string literal
+  else if LTok.Kind = tkWStringLit then
+  begin
+    Advance();
+    LLeft := AddNode(nkWStringLit, LTok.Range);
     LNode := FNodes[LLeft];
     LNode.Text := LTok.Text;
     FNodes[LLeft] := LNode;
@@ -1333,27 +1474,72 @@ begin
     if LBP <= AMinBP then
       Break;
 
-    // Function call: ident ( args )
+    // Function call or record literal: ident ( ... )
     if LTok.Kind = tkLParen then
     begin
       Advance(); // consume (
-      LCallNode := AddNode(nkFuncCall, LTok.Range);
-      AddChild(LCallNode, LLeft); // callee
 
-      // Parse argument list
-      if PeekKind() <> tkRParen then
+      // Record literal: ident(fieldName: expr, ...)
+      // Detect by checking if first token is ident followed by ':'
+      if (FNodes[LLeft].Kind = nkIdent) and
+         (PeekKind() = tkIdent) and
+         (FPos + 1 < FTokens.Count) and
+         (FTokens[FPos + 1].Kind = tkColon) then
       begin
-        LArgNode := ParseExpression(BP_NONE);
-        AddChild(LCallNode, LArgNode);
-        while Match(tkComma) do
+        // Parse as record literal
+        LCallNode := AddNode(nkRecordLiteral, FNodes[LLeft].Range);
+        LNode := FNodes[LCallNode];
+        LNode.Text := FNodes[LLeft].Text; // record type name
+        FNodes[LCallNode] := LNode;
+
+        // Parse field initializers: ident : expr { , ident : expr }
+        while (not AtEnd()) and (PeekKind() <> tkRParen) do
+        begin
+          LFieldInitNode := AddNode(nkFieldInit, Peek().Range);
+          LNode := FNodes[LFieldInitNode];
+          LNode.Text := Expect(tkIdent).Text; // field name
+          FNodes[LFieldInitNode] := LNode;
+
+          Expect(tkColon);
+
+          LArgNode := ParseExpression(BP_NONE);
+          AddChild(LFieldInitNode, LArgNode);
+          AddChild(LCallNode, LFieldInitNode);
+
+          if PeekKind() = tkComma then
+            Advance()
+          else if PeekKind() <> tkRParen then
+          begin
+            FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_EXPECTED_TOKEN,
+              RSScriptExpected, [''')'' or '',''', Peek().Text]);
+            Break;
+          end;
+        end;
+
+        Expect(tkRParen);
+        LLeft := LCallNode;
+      end
+      else
+      begin
+        // Parse as function call
+        LCallNode := AddNode(nkFuncCall, LTok.Range);
+        AddChild(LCallNode, LLeft); // callee
+
+        // Parse argument list
+        if PeekKind() <> tkRParen then
         begin
           LArgNode := ParseExpression(BP_NONE);
           AddChild(LCallNode, LArgNode);
+          while Match(tkComma) do
+          begin
+            LArgNode := ParseExpression(BP_NONE);
+            AddChild(LCallNode, LArgNode);
+          end;
         end;
-      end;
 
-      Expect(tkRParen);
-      LLeft := LCallNode;
+        Expect(tkRParen);
+        LLeft := LCallNode;
+      end;
     end
     else if LTok.Kind = tkDot then
     begin

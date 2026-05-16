@@ -42,6 +42,12 @@ type
     NodeIndex: Integer;          // AST node that declared this symbol
   end;
 
+  { TGnyScriptRecordFieldInfo — field metadata for record types }
+  TGnyScriptRecordFieldInfo = record
+    FieldName: string;
+    FieldTypeName: string;
+  end;
+
   { TGnyScriptScope — one level of the scope stack }
   TGnyScriptScope = class
   private
@@ -62,6 +68,7 @@ type
     FScopes: TObjectList<TGnyScriptScope>;
     FExterns: TList<TGnyScriptSymbol>;
     FModuleExports: TObjectDictionary<string, TList<TGnyScriptSymbol>>;
+    FRecordTypes: TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>;
     FLoopDepth: Integer;
 
     // Scope management
@@ -79,6 +86,7 @@ type
     procedure AnalyzeStatement(const AIndex: Integer);
     procedure AnalyzeVarDecl(const AIndex: Integer);
     procedure AnalyzeConstDecl(const AIndex: Integer);
+    procedure AnalyzeTypeDecl(const AIndex: Integer);
     procedure AnalyzeAssign(const AIndex: Integer);
     function  ResolveExprType(const AIndex: Integer): string;
 
@@ -106,6 +114,11 @@ type
     // Find all symbol keys matching a prefix (for overload resolution)
     function FindSymbolsWithPrefix(const APrefix: string;
       var AKeys: TArray<string>): Boolean;
+
+    // Record type field lookup (for emitter)
+    function FindRecordField(const ATypeName: string;
+      const AFieldName: string; var AFieldTypeName: string): Boolean;
+    function GetRecordFields(const ATypeName: string): TArray<TGnyScriptRecordFieldInfo>;
   end;
 
 const
@@ -114,6 +127,8 @@ const
   GNY_ERROR_SCRIPT_SEM_TYPE         = 'SS0003';
   GNY_ERROR_SCRIPT_SEM_CONST_ASSIGN = 'SS0004';
   GNY_ERROR_SCRIPT_SEM_NOT_IN_LOOP  = 'SS0005';
+  GNY_ERROR_SCRIPT_SEM_UNKNOWN_FIELD = 'SS0006';
+  GNY_ERROR_SCRIPT_SEM_UNKNOWN_TYPE  = 'SS0007';
 
 implementation
 
@@ -177,6 +192,7 @@ begin
     FScopes := TObjectList<TGnyScriptScope>.Create(True);
     FExterns := TList<TGnyScriptSymbol>.Create();
     FModuleExports := TObjectDictionary<string, TList<TGnyScriptSymbol>>.Create([doOwnsValues]);
+    FRecordTypes := TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>.Create();
   except
     on E: Exception do
     begin
@@ -188,6 +204,7 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FRecordTypes.Free();
   FModuleExports.Free();
   FExterns.Free();
   FScopes.Free();
@@ -348,6 +365,7 @@ var
 begin
   FNodes := ANodes;
   FScopes.Clear();
+  FRecordTypes.Clear();
 
   Status(RSSemStatusStart);
 
@@ -387,6 +405,8 @@ begin
       AnalyzeVarDecl(LNode.Children[LI])
     else if LChild.Kind = nkConstDecl then
       AnalyzeConstDecl(LNode.Children[LI])
+    else if LChild.Kind = nkTypeDecl then
+      AnalyzeTypeDecl(LNode.Children[LI])
     else if LChild.Kind = nkBlock then
       AnalyzeBlock(LNode.Children[LI]);
   end;
@@ -458,6 +478,8 @@ begin
       AnalyzeVarDecl(LNode.Children[LI])
     else if LChild.Kind = nkConstDecl then
       AnalyzeConstDecl(LNode.Children[LI])
+    else if LChild.Kind = nkTypeDecl then
+      AnalyzeTypeDecl(LNode.Children[LI])
     else if LChild.Kind = nkBlock then
       AnalyzeBlock(LNode.Children[LI]);
   end;
@@ -649,6 +671,63 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// Type declaration analysis
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptSemantics.AnalyzeTypeDecl(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LRecNode: TGnyScriptNode;
+  LFieldNode: TGnyScriptNode;
+  LSym: TGnyScriptSymbol;
+  LFields: TArray<TGnyScriptRecordFieldInfo>;
+  LFieldInfo: TGnyScriptRecordFieldInfo;
+  LFieldCount: Integer;
+  LI: Integer;
+begin
+  LNode := FNodes[AIndex];
+
+  // Register type name as a symbol
+  LSym := Default(TGnyScriptSymbol);
+  LSym.SymbolName := LNode.Text;
+  LSym.Kind := skType;
+  LSym.TypeName := LNode.Text;
+  LSym.NodeIndex := AIndex;
+
+  if not DeclareSymbol(LSym) then
+  begin
+    FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_DUPLICATE,
+      RSScriptDuplicateDecl, [LNode.Text]);
+    Exit;
+  end;
+
+  // If child is nkRecordType, collect field metadata
+  if (Length(LNode.Children) > 0) and
+     (FNodes[LNode.Children[0]].Kind = nkRecordType) then
+  begin
+    LRecNode := FNodes[LNode.Children[0]];
+    LFieldCount := 0;
+    SetLength(LFields, Length(LRecNode.Children));
+
+    for LI := 0 to Length(LRecNode.Children) - 1 do
+    begin
+      LFieldNode := FNodes[LRecNode.Children[LI]];
+      if LFieldNode.Kind = nkFieldDecl then
+      begin
+        LFieldInfo := Default(TGnyScriptRecordFieldInfo);
+        LFieldInfo.FieldName := LFieldNode.Text;
+        LFieldInfo.FieldTypeName := LFieldNode.Extra;
+        LFields[LFieldCount] := LFieldInfo;
+        Inc(LFieldCount);
+      end;
+    end;
+    SetLength(LFields, LFieldCount);
+
+    FRecordTypes.AddOrSetValue(LNode.Text, LFields);
+  end;
+end;
+
+//------------------------------------------------------------------------------
 // Assignment analysis
 //------------------------------------------------------------------------------
 
@@ -687,6 +766,7 @@ var
   LLeftType: string;
   LRightType: string;
   LKeys: TArray<string>;
+  LI: Integer;
 
   function IsFloatType(const AType: string): Boolean;
   begin
@@ -715,6 +795,9 @@ begin
 
   else if LNode.Kind = nkStringLit then
     Result := 'string'
+
+  else if LNode.Kind = nkWStringLit then
+    Result := 'wstring'
 
   else if LNode.Kind = nkBoolLit then
     Result := 'boolean'
@@ -768,7 +851,7 @@ begin
 
   else if LNode.Kind = nkFieldAccess then
   begin
-    // children[0] = LHS (object/module), Text = field name
+    // children[0] = LHS (object/module/record var), Text = field name
     if Length(LNode.Children) > 0 then
     begin
       if (FNodes[LNode.Children[0]].Kind = nkIdent) and
@@ -783,9 +866,38 @@ begin
             RSScriptUndeclaredIdent, [FNodes[LNode.Children[0]].Text + '.' + LNode.Text]);
       end
       else
-        // General field access — resolve LHS, field type TBD
-        ResolveExprType(LNode.Children[0]);
+      begin
+        // Resolve LHS type — could be a record variable
+        LLeftType := ResolveExprType(LNode.Children[0]);
+
+        // Try record field access: if LHS is a record type, look up the field
+        if (LLeftType <> '') and FindRecordField(LLeftType, LNode.Text, LRightType) then
+          Result := LRightType;
+      end;
     end;
+  end
+
+  else if LNode.Kind = nkRecordLiteral then
+  begin
+    // Text = record type name, children = nkFieldInit nodes
+    // Validate the type exists
+    if FindSymbol(LNode.Text, LSym) and (LSym.Kind = skType) then
+    begin
+      Result := LNode.Text;
+
+      // Resolve all field initializer expressions
+      for LI := 0 to Length(LNode.Children) - 1 do
+      begin
+        if FNodes[LNode.Children[LI]].Kind = nkFieldInit then
+        begin
+          if Length(FNodes[LNode.Children[LI]].Children) > 0 then
+            ResolveExprType(FNodes[LNode.Children[LI]].Children[0]);
+        end;
+      end;
+    end
+    else
+      FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNKNOWN_TYPE,
+        RSScriptUndeclaredIdent, [LNode.Text]);
   end
 
   else if LNode.Kind = nkFuncCall then
@@ -823,6 +935,38 @@ begin
   // Store resolved type on the node for the emitter to read
   if Result <> '' then
     StoreType(Result);
+end;
+
+//------------------------------------------------------------------------------
+// Record type field lookup (for emitter)
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.FindRecordField(const ATypeName: string;
+  const AFieldName: string; var AFieldTypeName: string): Boolean;
+var
+  LFields: TArray<TGnyScriptRecordFieldInfo>;
+  LI: Integer;
+begin
+  Result := False;
+  if not FRecordTypes.TryGetValue(ATypeName, LFields) then
+    Exit;
+
+  for LI := 0 to Length(LFields) - 1 do
+  begin
+    if LFields[LI].FieldName = AFieldName then
+    begin
+      AFieldTypeName := LFields[LI].FieldTypeName;
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+function TGnyScriptSemantics.GetRecordFields(
+  const ATypeName: string): TArray<TGnyScriptRecordFieldInfo>;
+begin
+  if not FRecordTypes.TryGetValue(ATypeName, Result) then
+    Result := nil;
 end;
 
 end.
