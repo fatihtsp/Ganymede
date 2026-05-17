@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.ImportClause;
+unit UTest.ImportClause;
 
 {$I Ganymede.Defines.inc}
 

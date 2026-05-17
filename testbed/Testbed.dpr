@@ -15,7 +15,6 @@ program Testbed;
 
 uses
   System.SysUtils,
-  UTestbed in 'UTestbed.pas',
   Ganymede.ABI in '..\src\Ganymede.ABI.pas',
   Ganymede.API in '..\src\Ganymede.API.pas',
   Ganymede.Builders in '..\src\Ganymede.Builders.pas',
@@ -38,12 +37,21 @@ uses
   Ganymede.TOML in '..\src\Ganymede.TOML.pas',
   Ganymede.Types in '..\src\Ganymede.Types.pas',
   Ganymede.Utils in '..\src\Ganymede.Utils.pas',
-  UCommon in 'UCommon.pas',
-  UTest.Script.ImportClause in 'UTest.Script.ImportClause.pas',
   Ganymede.Debug.SourceMap in '..\src\Ganymede.Debug.SourceMap.pas',
-  UTest.Script.MatchStmt in 'UTest.Script.MatchStmt.pas',
-  UTest.Script.Records in 'UTest.Script.Records.pas',
-  UTest.Arrays in 'UTest.Arrays.pas';
+  UCommon in 'UCommon.pas',
+  UDemo.Performance in 'UDemo.Performance.pas',
+  UTest.Arrays in 'UTest.Arrays.pas',
+  UTest.Constants in 'UTest.Constants.pas',
+  UTest.ControlFlow in 'UTest.ControlFlow.pas',
+  UTest.ImportClause in 'UTest.ImportClause.pas',
+  UTest.ImportHost in 'UTest.ImportHost.pas',
+  UTest.MatchStmt in 'UTest.MatchStmt.pas',
+  UTest.NumericOps in 'UTest.NumericOps.pas',
+  UTest.Pointers in 'UTest.Pointers.pas',
+  UTest.Records in 'UTest.Records.pas',
+  UTest.StringIO in 'UTest.StringIO.pas',
+  UTest.VarAssign in 'UTest.VarAssign.pas',
+  UTestbed in 'UTestbed.pas';
 
 begin
   RunTestbed();

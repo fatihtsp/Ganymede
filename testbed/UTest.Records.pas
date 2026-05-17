@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.Records;
+unit UTest.Records;
 
 {$I Ganymede.Defines.inc}
 
@@ -75,10 +75,11 @@ begin
       if not LScript.Compile() then
       begin
         FlushErrors(LScript.GetErrors());
-        WriteLn(LScript.GetSSADump());
         Check(False, 'Compile failed (opt %d)', [LOrd]);
         Continue;
       end;
+
+      //WriteLn(LScript.GetSSADump());
 
       //WriteLn(LScript.GetSSADump());
       Check(True, 'Compiled successfully (opt %d)', [LOrd]);

@@ -1,4 +1,4 @@
-{===============================================================================
+﻿{===============================================================================
   Ganymede™ - Embeddable Native Scripting Engine
 
   Copyright © 2026-present tinyBigGAMES™ LLC
@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.MatchStmt;
+unit UTest.MatchStmt;
 
 {$I Ganymede.Defines.inc}
 

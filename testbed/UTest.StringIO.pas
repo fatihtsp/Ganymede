@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.StringIO;
+unit UTest.StringIO;
 
 {$I Ganymede.Defines.inc}
 

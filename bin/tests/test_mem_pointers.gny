@@ -1,0 +1,504 @@
+module mem test_mem_pointers;
+
+// ==========================================================================
+// int8 pointer — address of + deref, int8 return
+// ==========================================================================
+
+public routine ptr_i8(): int8;
+var
+  x: int8;
+  p: pointer to int8;
+begin
+  x := 127;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// int16 pointer — int16 return
+// ==========================================================================
+
+public routine ptr_i16(): int16;
+var
+  x: int16;
+  p: pointer to int16;
+begin
+  x := 30000;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// int32 pointer — int32 return
+// ==========================================================================
+
+public routine ptr_i32(): int32;
+var
+  x: int32;
+  p: pointer to int32;
+begin
+  x := 42;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// int64 pointer — int64 return
+// ==========================================================================
+
+public routine ptr_i64(): int64;
+var
+  x: int64;
+  p: pointer to int64;
+begin
+  x := 4000000000;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// uint8 pointer — uint8 return
+// ==========================================================================
+
+public routine ptr_u8(): uint8;
+var
+  x: uint8;
+  p: pointer to uint8;
+begin
+  x := 250;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// uint16 pointer — uint16 return
+// ==========================================================================
+
+public routine ptr_u16(): uint16;
+var
+  x: uint16;
+  p: pointer to uint16;
+begin
+  x := 50000;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// uint32 pointer — uint32 return
+// ==========================================================================
+
+public routine ptr_u32(): uint32;
+var
+  x: uint32;
+  p: pointer to uint32;
+begin
+  x := 300000;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// float32 pointer — float32 return
+// ==========================================================================
+
+public routine ptr_f32(): float32;
+var
+  x: float32;
+  p: pointer to float32;
+begin
+  x := 2.5;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// float64 pointer — float64 return
+// ==========================================================================
+
+public routine ptr_f64(): float64;
+var
+  x: float64;
+  p: pointer to float64;
+begin
+  x := 3.14159;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// boolean pointer — boolean return
+// ==========================================================================
+
+public routine ptr_bool_true(): boolean;
+var
+  x: boolean;
+  p: pointer to boolean;
+begin
+  x := true;
+  p := address of x;
+  return p^;
+end;
+
+public routine ptr_bool_false(): boolean;
+var
+  x: boolean;
+  p: pointer to boolean;
+begin
+  x := false;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// Write through dereference — int32
+// ==========================================================================
+
+public routine ptr_write_i32(): int32;
+var
+  x: int32;
+  p: pointer to int32;
+begin
+  x := 10;
+  p := address of x;
+  p^ := 99;
+  return x;
+end;
+
+// ==========================================================================
+// Write through dereference — int64
+// ==========================================================================
+
+public routine ptr_write_i64(): int64;
+var
+  x: int64;
+  p: pointer to int64;
+begin
+  x := 0;
+  p := address of x;
+  p^ := 9999999999;
+  return x;
+end;
+
+// ==========================================================================
+// Write through dereference — float64
+// ==========================================================================
+
+public routine ptr_write_f64(): float64;
+var
+  x: float64;
+  p: pointer to float64;
+begin
+  x := 0.0;
+  p := address of x;
+  p^ := 77.25;
+  return x;
+end;
+
+// ==========================================================================
+// Nil pointer — assign nil, compare to nil, int32 return
+// ==========================================================================
+
+public routine ptr_nil(): int32;
+var
+  p: pointer to int32;
+begin
+  p := nil;
+  if p = nil then
+    return 1;
+  end;
+  return 0;
+end;
+
+// ==========================================================================
+// Pointer not-nil comparison after address-of, int32 return
+// ==========================================================================
+
+public routine ptr_not_nil(): int32;
+var
+  x: int32;
+  p: pointer to int32;
+begin
+  x := 1;
+  p := address of x;
+  if p <> nil then
+    return 1;
+  end;
+  return 0;
+end;
+
+// ==========================================================================
+// Untyped pointer — nil check, int32 return
+// ==========================================================================
+
+public routine ptr_untyped(): int32;
+var
+  p: pointer;
+begin
+  p := nil;
+  if p = nil then
+    return 1;
+  end;
+  return 0;
+end;
+
+// ==========================================================================
+// Ampersand syntax — int32 return
+// ==========================================================================
+
+public routine ptr_ampersand(): int32;
+var
+  x: int32;
+  p: pointer to int32;
+begin
+  x := 77;
+  p := &x;
+  return p^;
+end;
+
+// ==========================================================================
+// Named pointer type via type block — int32 return
+// ==========================================================================
+
+type
+  PInt32 = pointer to int32;
+
+public routine ptr_named_type(): int32;
+var
+  x: int32;
+  p: PInt32;
+begin
+  x := 55;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// Named pointer type — float64 return
+// ==========================================================================
+
+type
+  PFloat64 = pointer to float64;
+
+public routine ptr_named_f64(): float64;
+var
+  x: float64;
+  p: PFloat64;
+begin
+  x := 12.75;
+  p := address of x;
+  return p^;
+end;
+
+// ==========================================================================
+// Pass-by-reference via int32 pointer
+// ==========================================================================
+
+routine set_i32(p: pointer to int32; val: int32);
+begin
+  p^ := val;
+end;
+
+public routine ptr_passref_i32(): int32;
+var
+  x: int32;
+begin
+  x := 0;
+  set_i32(address of x, 123);
+  return x;
+end;
+
+// ==========================================================================
+// Pass-by-reference via int64 pointer
+// ==========================================================================
+
+routine set_i64(p: pointer to int64; val: int64);
+begin
+  p^ := val;
+end;
+
+public routine ptr_passref_i64(): int64;
+var
+  x: int64;
+begin
+  x := 0;
+  set_i64(address of x, 5000000000);
+  return x;
+end;
+
+// ==========================================================================
+// Pass-by-reference via float64 pointer
+// ==========================================================================
+
+routine set_f64(p: pointer to float64; val: float64);
+begin
+  p^ := val;
+end;
+
+public routine ptr_passref_f64(): float64;
+var
+  x: float64;
+begin
+  x := 0.0;
+  set_f64(address of x, 99.5);
+  return x;
+end;
+
+// ==========================================================================
+// Classic swap via pointers — int32
+// ==========================================================================
+
+routine swap_i32(a: pointer to int32; b: pointer to int32);
+var
+  tmp: int32;
+begin
+  tmp := a^;
+  a^ := b^;
+  b^ := tmp;
+end;
+
+public routine ptr_swap(): int32;
+var
+  x: int32;
+  y: int32;
+begin
+  x := 10;
+  y := 20;
+  swap_i32(address of x, address of y);
+  // After swap: x=20, y=10, return x*100 + y = 2010
+  return x * 100 + y;
+end;
+
+// ==========================================================================
+// Pointer to record — deref + field access, int32 return
+// ==========================================================================
+
+type
+  TPoint = record
+    px: int32;
+    py: int32;
+  end;
+
+routine get_px(p: pointer to TPoint): int32;
+begin
+  return p^.px;
+end;
+
+public routine ptr_rec_field(): int32;
+var
+  pt: TPoint;
+begin
+  pt.px := 100;
+  pt.py := 200;
+  return get_px(address of pt) + pt.py;
+end;
+
+// ==========================================================================
+// Write record field through pointer — int32 return
+// ==========================================================================
+
+routine set_px(p: pointer to TPoint; val: int32);
+begin
+  p^.px := val;
+end;
+
+public routine ptr_rec_write(): int32;
+var
+  pt: TPoint;
+begin
+  pt.px := 0;
+  pt.py := 50;
+  set_px(address of pt, 77);
+  return pt.px + pt.py;
+end;
+
+// ==========================================================================
+// Pointer overwrite — reassign pointer to different variable, int32 return
+// ==========================================================================
+
+public routine ptr_reassign(): int32;
+var
+  a: int32;
+  b: int32;
+  p: pointer to int32;
+begin
+  a := 10;
+  b := 20;
+  p := address of a;
+  p := address of b;
+  return p^;
+end;
+
+// ==========================================================================
+// Multiple pointer vars in same routine — int64 return
+// ==========================================================================
+
+public routine ptr_multi(): int64;
+var
+  a: int32;
+  b: int64;
+  c: float64;
+  pa: pointer to int32;
+  pb: pointer to int64;
+  pc: pointer to float64;
+  r: int64;
+begin
+  a := 10;
+  b := 20;
+  c := 30.0;
+  pa := address of a;
+  pb := address of b;
+  pc := address of c;
+  r := pa^ + pb^;
+  return r;
+end;
+
+// ==========================================================================
+// Kitchen sink — pointer to every primitive type, int64 return
+// ==========================================================================
+
+public routine ptr_kitchensink(): int64;
+var
+  vi8: int8;
+  vi16: int16;
+  vi32: int32;
+  vi64: int64;
+  vu8: uint8;
+  vu16: uint16;
+  vu32: uint32;
+  vbool: boolean;
+  pi8: pointer to int8;
+  pi16: pointer to int16;
+  pi32: pointer to int32;
+  pi64: pointer to int64;
+  pu8: pointer to uint8;
+  pu16: pointer to uint16;
+  pu32: pointer to uint32;
+  pbool: pointer to boolean;
+  r: int64;
+begin
+  vi8 := 1;
+  vi16 := 2;
+  vi32 := 3;
+  vi64 := 4;
+  vu8 := 5;
+  vu16 := 6;
+  vu32 := 7;
+  vbool := true;
+  pi8 := address of vi8;
+  pi16 := address of vi16;
+  pi32 := address of vi32;
+  pi64 := address of vi64;
+  pu8 := address of vu8;
+  pu16 := address of vu16;
+  pu32 := address of vu32;
+  pbool := address of vbool;
+  // 1+2+3+4+5+6+7 = 28, bool=1 → 29
+  r := pi8^ + pi16^ + pi32^ + pi64^ + pu8^ + pu16^ + pu32^;
+  if pbool^ then
+    r := r + 1;
+  end;
+  return r;
+end;
+
+end.

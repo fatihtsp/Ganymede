@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.NumericOps;
+unit UTest.NumericOps;
 
 {$I Ganymede.Defines.inc}
 

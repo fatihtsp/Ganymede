@@ -1673,9 +1673,14 @@ begin
         LInstr := LBlock.GetInstruction(LInstrIdx);
         
         // Check for: dest = var (simple copy)
+        // Skip emitter-materialized temps (__t*) — the emitter creates these
+        // to ensure values survive across function call boundaries. Propagating
+        // them away causes the codegen to lose spill slots for values that must
+        // live across calls (e.g., string comparison results).
         if (LInstr.Kind = sikAssign) and 
            (LInstr.Dest.IsValid()) and 
-           (LInstr.Op1.Kind = sokVar) then
+           (LInstr.Op1.Kind = sokVar) and
+           (not LInstr.Dest.BaseName.StartsWith('__t')) then
         begin
           LVarKey := LInstr.Dest.ToString();
           LCopies.AddOrSetValue(LVarKey, LInstr.Op1);

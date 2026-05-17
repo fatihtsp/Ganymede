@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.ControlFlow;
+unit UTest.ControlFlow;
 
 {$I Ganymede.Defines.inc}
 

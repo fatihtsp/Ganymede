@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UDemo.Script.Performance;
+unit UDemo.Performance;
 
 {$I Ganymede.Defines.inc}
 

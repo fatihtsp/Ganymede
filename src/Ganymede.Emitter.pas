@@ -441,6 +441,24 @@ begin
       else
         FBackend.DefineDynArray(LTypeName, LArrNode.Extra);
     end;
+  end
+
+  // Pointer type
+  else if FNodes[LNode.Children[0]].Kind = nkPointerType then
+  begin
+    LArrNode := FNodes[LNode.Children[0]]; // reuse variable for pointer node
+
+    if LArrNode.Extra <> '' then
+    begin
+      // Typed pointer: pointer to T
+      if ResolveValueType(LArrNode.Extra) <> gvtVoid then
+        FBackend.DefinePointer(LTypeName, ResolveValueType(LArrNode.Extra))
+      else
+        FBackend.DefinePointer(LTypeName, LArrNode.Extra);
+    end
+    else
+      // Untyped pointer
+      FBackend.DefinePointer(LTypeName);
   end;
 end;
 
@@ -966,6 +984,20 @@ begin
     if not LNode.Extra.Contains('[') then
       FBackend.Let(LNode.Text, FBackend.Null());
   end
+  // Inline pointer types: "pointer to T" or bare "pointer"
+  else if LNode.Extra.StartsWith('pointer') then
+  begin
+    // Auto-define inline pointer type on backend if needed
+    if LNode.Extra.StartsWith('pointer to ') then
+    begin
+      if ResolveValueType(Copy(LNode.Extra, 12, MaxInt)) <> gvtVoid then
+        FBackend.DefinePointer(LNode.Extra,
+          ResolveValueType(Copy(LNode.Extra, 12, MaxInt)))
+      else
+        FBackend.DefinePointer(LNode.Extra, Copy(LNode.Extra, 12, MaxInt));
+    end;
+    FBackend.VarDecl(LNode.Text, gvtPointer);
+  end
   // Record-typed variables use the string overload of VarDecl
   else if ResolveValueType(LNode.Extra) = gvtVoid then
     FBackend.VarDecl(LNode.Text, LNode.Extra)
@@ -1014,6 +1046,7 @@ var
   LLhsNode: TGnyScriptNode;
   LRhsNode: TGnyScriptNode;
   LRhsExpr: TGnyExpr;
+  LLeft: TGnyExpr;
   LConcatExpr: TGnyExpr;
   LOp: string;
   LLhsFloat: Boolean;
@@ -1063,7 +1096,9 @@ begin
       begin
         if LRhsNode.Kind = nkStringLit then
         begin
-          // Create managed string from literal, assign via StrAssign, release temp
+          // Create managed string from literal, assign via StrAssign.
+          // Do NOT release the temp — the backend auto-generates a release
+          // for the Invoke result after StrAssign consumes it.
           LRhsExpr := FBackend.Invoke('Gny_StrFromLiteral',
             [FBackend.Str(LRhsNode.Text),
              FBackend.Int64(Length(LRhsNode.Text))]);
@@ -1071,7 +1106,6 @@ begin
             [FBackend.AddrOfVal(
                FBackend.GetField(EmitExpr(LLhsNode.Children[0]), LLhsNode.Text)),
              LRhsExpr]);
-          FBackend.Call('Gny_StrRelease', [LRhsExpr]);
         end
         else
         begin
@@ -1124,6 +1158,28 @@ begin
           EmitExpr(LLhsNode.Children[0]),
           EmitExpr(LLhsNode.Children[1])),
         LRhsExpr);
+    end;
+    Exit;
+  end;
+
+  //----------------------------------------------------------------------------
+  // Pointer dereference assignment — p^ := value
+  //----------------------------------------------------------------------------
+  if LLhsNode.Kind = nkDeref then
+  begin
+    if (LOp = ':=') and (Length(LLhsNode.Children) > 0) then
+    begin
+      LRhsExpr := EmitExpr(LNode.Children[1]);
+      LLeft := EmitExpr(LLhsNode.Children[0]);
+
+      if (LLhsNode.Extra <> '') and (LLhsNode.Extra <> 'pointer') and
+         (ResolveValueType(LLhsNode.Extra) <> gvtVoid) then
+        FBackend.SetVal(FBackend.Deref(LLeft, ResolveValueType(LLhsNode.Extra)),
+          LRhsExpr)
+      else if (LLhsNode.Extra <> '') and (LLhsNode.Extra <> 'pointer') then
+        FBackend.SetVal(FBackend.Deref(LLeft, LLhsNode.Extra), LRhsExpr)
+      else
+        FBackend.SetVal(FBackend.Deref(LLeft), LRhsExpr);
     end;
     Exit;
   end;
@@ -1417,9 +1473,31 @@ begin
 
         if LNode.Text = '+' then
         begin
-          // String concat — result is new TStringRec* (refcount 1)
-          Result := FBackend.Invoke('Gny_StrConcat', [LLeft, LRight]);
-          // Release literal temps after concat consumes them
+          // Materialize literal operands into named temps so they survive
+          // until StrConcat executes (Invoke is deferred, Call is immediate)
+          if FNodes[LNode.Children[0]].Kind = nkStringLit then
+          begin
+            FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
+            FBackend.Let(Format('__t%d', [FTempIndex]), LLeft);
+            LLeft := FBackend.Get(Format('__t%d', [FTempIndex]));
+            Inc(FTempIndex);
+          end;
+          if FNodes[LNode.Children[1]].Kind = nkStringLit then
+          begin
+            FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
+            FBackend.Let(Format('__t%d', [FTempIndex]), LRight);
+            LRight := FBackend.Get(Format('__t%d', [FTempIndex]));
+            Inc(FTempIndex);
+          end;
+
+          // Materialize concat result so StrConcat executes before releases
+          FBackend.VarDecl(Format('__t%d', [FTempIndex]), gvtPointer);
+          FBackend.Let(Format('__t%d', [FTempIndex]),
+            FBackend.Invoke('Gny_StrConcat', [LLeft, LRight]));
+          Result := FBackend.Get(Format('__t%d', [FTempIndex]));
+          Inc(FTempIndex);
+
+          // Release literal temps after concat has consumed them
           if FNodes[LNode.Children[0]].Kind = nkStringLit then
             FBackend.Call('Gny_StrRelease', [LLeft]);
           if FNodes[LNode.Children[1]].Kind = nkStringLit then
@@ -1513,7 +1591,7 @@ begin
         Result := FBackend.IMod(LLeft, LRight)
 
       // Bitwise operators
-      else if (LNode.Text = 'xor') or (LNode.Text = '^') then
+      else if LNode.Text = 'xor' then
         Result := FBackend.BitXor(LLeft, LRight)
       else if LNode.Text = 'shl' then
         Result := FBackend.ShiftL(LLeft, LRight)
@@ -1670,6 +1748,42 @@ begin
       else
         // Dynamic array (type starts with "array of")
         Result := FBackend.Invoke('Gny_Len', [FBackend.Int64(2), LLeft]);
+    end;
+  end
+
+  // nil literal
+  else if LNode.Kind = nkNilLit then
+    Result := FBackend.Null()
+
+  // address of expr
+  else if LNode.Kind = nkAddressOf then
+  begin
+    if Length(LNode.Children) > 0 then
+    begin
+      // If child is a simple identifier, use AddrOf(name)
+      if FNodes[LNode.Children[0]].Kind = nkIdent then
+        Result := FBackend.AddrOf(FNodes[LNode.Children[0]].Text)
+      else
+        // For complex expressions, use AddrOfVal
+        Result := FBackend.AddrOfVal(EmitExpr(LNode.Children[0]));
+    end;
+  end
+
+  // pointer dereference: expr^
+  else if LNode.Kind = nkDeref then
+  begin
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeft := EmitExpr(LNode.Children[0]);
+
+      // Use typed Deref if we know the pointee type
+      if (LNode.Extra <> '') and (LNode.Extra <> 'pointer') and
+         (ResolveValueType(LNode.Extra) <> gvtVoid) then
+        Result := FBackend.Deref(LLeft, ResolveValueType(LNode.Extra))
+      else if (LNode.Extra <> '') and (LNode.Extra <> 'pointer') then
+        Result := FBackend.Deref(LLeft, LNode.Extra)
+      else
+        Result := FBackend.Deref(LLeft);
     end;
   end;
 end;

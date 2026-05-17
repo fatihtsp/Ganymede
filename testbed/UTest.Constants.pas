@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.Constants;
+unit UTest.Constants;
 
 {$I Ganymede.Defines.inc}
 

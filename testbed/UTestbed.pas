@@ -20,16 +20,17 @@ uses
   Ganymede.Utils,
   Ganymede.ConsoleMenu,
   Ganymede.TestCase,
-  UDemo.Script.Performance,
-  UTest.Script.VarAssign,
-  UTest.Script.Constants,
-  UTest.Script.NumericOps,
-  UTest.Script.ControlFlow,
-  UTest.Script.StringIO,
-  UTest.Script.ImportHost,
-  UTest.Script.ImportClause,
-  UTest.Script.MatchStmt,
-  UTest.Script.Records,
+  UDemo.Performance,
+  UTest.VarAssign,
+  UTest.Constants,
+  UTest.NumericOps,
+  UTest.ControlFlow,
+  UTest.StringIO,
+  UTest.ImportHost,
+  UTest.ImportClause,
+  UTest.MatchStmt,
+  UTest.Records,
+  UTest.Pointers,
   UTest.Arrays;
 
 procedure Menu();
@@ -66,7 +67,9 @@ begin
       .Add('Record Types',
         procedure begin TGnyTestCase.Run(TScriptRecordsTest) end)
       .Add('Array Types',
-        procedure begin TGnyTestCase.Run(TArraysTest) end);
+        procedure begin TGnyTestCase.Run(TArraysTest) end)
+      .Add('Pointer Types',
+        procedure begin TGnyTestCase.Run(TScriptPointersTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

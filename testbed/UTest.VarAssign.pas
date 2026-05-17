@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.VarAssign;
+unit UTest.VarAssign;
 
 {$I Ganymede.Defines.inc}
 

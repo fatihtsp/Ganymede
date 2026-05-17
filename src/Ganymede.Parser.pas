@@ -120,6 +120,7 @@ type
     function ParseTypeBlock(const AParentNode: Integer): Integer;
     function ParseRecordType(): Integer;
     function ParseArrayType(): Integer;
+    function ParsePointerType(): Integer;
     function TryParseAssign(const ALhs: Integer): Integer;
 
     // Parsers — expressions (Pratt)
@@ -592,6 +593,19 @@ begin
       Expect(tkOf);
       Result := 'array of ' + ParseTypeExpr();
     end;
+  end
+  // Pointer type: pointer [to TypeExpr]
+  else if LTok.Kind = tkPointer then
+  begin
+    Advance(); // consume 'pointer'
+
+    if PeekKind() = tkTo then
+    begin
+      Advance(); // consume 'to'
+      Result := 'pointer to ' + ParseTypeExpr();
+    end
+    else
+      Result := 'pointer';
   end
   else
   begin
@@ -1275,6 +1289,13 @@ begin
       if LTypeDefNode >= 0 then
         AddChild(LTypeDeclNode, LTypeDefNode);
     end
+    // Pointer type
+    else if PeekKind() = tkPointer then
+    begin
+      LTypeDefNode := ParsePointerType();
+      if LTypeDefNode >= 0 then
+        AddChild(LTypeDeclNode, LTypeDefNode);
+    end
     else
     begin
       FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
@@ -1405,6 +1426,32 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// Pointer type: pointer [to [const] TypeExpr]
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParsePointerType(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LPtrNode: Integer;
+  LNode: TGnyScriptNode;
+begin
+  LTok := Expect(tkPointer);
+  LPtrNode := AddNode(nkPointerType, LTok.Range);
+
+  // Optional 'to TypeExpr' — typed pointer
+  if PeekKind() = tkTo then
+  begin
+    Advance(); // consume 'to'
+    LNode := FNodes[LPtrNode];
+    LNode.Extra := ParseTypeExpr(); // pointee type name
+    FNodes[LPtrNode] := LNode;
+  end;
+  // else: untyped pointer (Extra remains empty)
+
+  Result := LPtrNode;
+end;
+
+//------------------------------------------------------------------------------
 // Assignment: Designator ( := | += | -= | *= | /= ) Expression
 //------------------------------------------------------------------------------
 
@@ -1449,7 +1496,7 @@ begin
      (AKind = tkIn) then
     Result := BP_COMPARE
   else if (AKind = tkPlus) or (AKind = tkMinus) or
-          (AKind = tkOr) or (AKind = tkXor) or (AKind = tkCaret) then
+          (AKind = tkOr) or (AKind = tkXor) then
     Result := BP_ADDITIVE
   else if (AKind = tkStar) or (AKind = tkSlash) or
           (AKind = tkDiv) or (AKind = tkMod) or
@@ -1461,6 +1508,8 @@ begin
     Result := BP_POSTFIX  // field access
   else if AKind = tkLBracket then
     Result := BP_POSTFIX  // array indexing
+  else if AKind = tkCaret then
+    Result := BP_POSTFIX  // pointer dereference
   else
     Result := BP_NONE;
 end;
@@ -1580,6 +1629,32 @@ begin
     Expect(tkRParen);
   end
 
+  // nil literal
+  else if LTok.Kind = tkNil then
+  begin
+    Advance();
+    LLeft := AddNode(nkNilLit, LTok.Range);
+  end
+
+  // address of expr
+  else if LTok.Kind = tkAddress then
+  begin
+    Advance(); // consume 'address'
+    Expect(tkOf);
+    LLeft := AddNode(nkAddressOf, LTok.Range);
+    LRight := ParseExpression(BP_UNARY);
+    AddChild(LLeft, LRight);
+  end
+
+  // &expr — short form of address of
+  else if LTok.Kind = tkAmpersand then
+  begin
+    Advance(); // consume '&'
+    LLeft := AddNode(nkAddressOf, LTok.Range);
+    LRight := ParseExpression(BP_UNARY);
+    AddChild(LLeft, LRight);
+  end
+
   else
   begin
     FErrors.Add(LTok.Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
@@ -1686,6 +1761,14 @@ begin
       LOpNode := AddNode(nkArrayIndex, LTok.Range);
       AddChild(LOpNode, LLeft);  // array expression
       AddChild(LOpNode, LRight); // index expression
+      LLeft := LOpNode;
+    end
+    else if LTok.Kind = tkCaret then
+    begin
+      // Pointer dereference: expr ^
+      Advance(); // consume ^
+      LOpNode := AddNode(nkDeref, LTok.Range);
+      AddChild(LOpNode, LLeft); // pointer expression
       LLeft := LOpNode;
     end
     else

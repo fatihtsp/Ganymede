@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit UTest.Script.ImportHost;
+unit UTest.ImportHost;
 
 {$I Ganymede.Defines.inc}
 

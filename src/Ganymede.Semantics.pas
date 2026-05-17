@@ -78,6 +78,7 @@ type
     FModuleExports: TObjectDictionary<string, TList<TGnyScriptSymbol>>;
     FRecordTypes: TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>;
     FArrayTypes: TDictionary<string, TGnyScriptArrayTypeInfo>;
+    FPointerTypes: TDictionary<string, string>; // type name → pointee type name
     FLoopDepth: Integer;
 
     // Scope management
@@ -135,6 +136,11 @@ type
     function GetArrayTypeInfo(const ATypeName: string;
       var AInfo: TGnyScriptArrayTypeInfo): Boolean;
     function IsArrayType(const ATypeName: string): Boolean;
+
+    // Pointer type lookup (for emitter)
+    function IsPointerType(const ATypeName: string): Boolean;
+    function FindPointeeType(const ATypeName: string;
+      var APointeeTypeName: string): Boolean;
   end;
 
 const
@@ -210,6 +216,7 @@ begin
     FModuleExports := TObjectDictionary<string, TList<TGnyScriptSymbol>>.Create([doOwnsValues]);
     FRecordTypes := TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>.Create();
     FArrayTypes := TDictionary<string, TGnyScriptArrayTypeInfo>.Create();
+    FPointerTypes := TDictionary<string, string>.Create();
   except
     on E: Exception do
     begin
@@ -221,6 +228,7 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FPointerTypes.Free();
   FArrayTypes.Free();
   FRecordTypes.Free();
   FModuleExports.Free();
@@ -698,6 +706,15 @@ begin
     FArrayTypes.AddOrSetValue(LTypeName, LArrayInfo);
   end;
 
+  // Auto-register inline pointer types (e.g., "pointer to int32")
+  if LTypeName.StartsWith('pointer') and (not FPointerTypes.ContainsKey(LTypeName)) then
+  begin
+    if LTypeName.StartsWith('pointer to ') then
+      FPointerTypes.AddOrSetValue(LTypeName, Copy(LTypeName, 12, MaxInt))
+    else
+      FPointerTypes.AddOrSetValue(LTypeName, '');
+  end;
+
   // Analyze initializer expression if present
   if Length(LNode.Children) > 0 then
     ResolveExprType(LNode.Children[0]);
@@ -809,6 +826,14 @@ begin
     end;
 
     FArrayTypes.AddOrSetValue(LNode.Text, LArrayInfo);
+  end
+
+  // If child is nkPointerType, register pointee type
+  else if (Length(LNode.Children) > 0) and
+     (FNodes[LNode.Children[0]].Kind = nkPointerType) then
+  begin
+    LRecNode := FNodes[LNode.Children[0]]; // reuse variable for pointer node
+    FPointerTypes.AddOrSetValue(LNode.Text, LRecNode.Extra);
   end;
 end;
 
@@ -1037,6 +1062,35 @@ begin
     if Length(LNode.Children) > 0 then
       ResolveExprType(LNode.Children[0]);
     Result := 'uint64';
+  end
+
+  else if LNode.Kind = nkNilLit then
+    Result := 'pointer'
+
+  else if LNode.Kind = nkAddressOf then
+  begin
+    // address of expr — result is pointer to the child's type
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeftType := ResolveExprType(LNode.Children[0]);
+      if LLeftType <> '' then
+        Result := 'pointer to ' + LLeftType
+      else
+        Result := 'pointer';
+    end;
+  end
+
+  else if LNode.Kind = nkDeref then
+  begin
+    // expr^ — dereference; result is the pointee type
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeftType := ResolveExprType(LNode.Children[0]);
+      if (LLeftType <> '') and FindPointeeType(LLeftType, LRightType) then
+        Result := LRightType
+      else
+        Result := 'pointer'; // untyped pointer dereference
+    end;
   end;
 
   // Store resolved type on the node for the emitter to read
@@ -1099,6 +1153,30 @@ end;
 function TGnyScriptSemantics.IsArrayType(const ATypeName: string): Boolean;
 begin
   Result := FArrayTypes.ContainsKey(ATypeName);
+end;
+
+//------------------------------------------------------------------------------
+// Pointer type lookup
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.IsPointerType(const ATypeName: string): Boolean;
+begin
+  Result := (ATypeName = 'pointer') or FPointerTypes.ContainsKey(ATypeName);
+end;
+
+function TGnyScriptSemantics.FindPointeeType(const ATypeName: string;
+  var APointeeTypeName: string): Boolean;
+begin
+  // Inline pointer types: "pointer to X"
+  if ATypeName.StartsWith('pointer to ') then
+  begin
+    APointeeTypeName := Copy(ATypeName, 12, MaxInt);
+    Result := True;
+    Exit;
+  end;
+
+  // Named pointer types registered via type block
+  Result := FPointerTypes.TryGetValue(ATypeName, APointeeTypeName);
 end;
 
 end.
