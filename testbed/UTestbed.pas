@@ -37,7 +37,8 @@ uses
   UTest.RoutineTypes,
   UTest.VariadicArgs,
   UTest.ConditionalComp,
-  UTest.GetMem;
+  UTest.GetMem,
+  UTest.Intrinsics;
 
 procedure Menu();
 var
@@ -87,7 +88,9 @@ begin
       .Add('Conditional Compilation',
         procedure begin TGnyTestCase.Run(TScriptConditionalCompTest) end)
       .Add('GetMem/FreeMem/ResizeMem',
-        procedure begin TGnyTestCase.Run(TScriptGetMemTest) end);
+        procedure begin TGnyTestCase.Run(TScriptGetMemTest) end)
+      .Add('Intrinsics (size, utf8)',
+        procedure begin TGnyTestCase.Run(TScriptIntrinsicsTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

@@ -1721,6 +1721,7 @@ var
   LInt64Val: Int64;
   LFmt: TFormatSettings;
   LText: string;
+  LElemVT: TGnyValueType;
   LSetTypeName: string;
   LSetChild: TGnyScriptNode;
   LSetExpr: TGnyExpr;
@@ -2222,6 +2223,41 @@ begin
     end;
   end
 
+  // size() intrinsic — compile-time type size in bytes
+  else if LNode.Kind = nkSize then
+  begin
+    LText := LNode.Text; // type name from ParseTypeExpr
+    LElemVT := ResolveValueType(LText);
+    if LElemVT <> gvtVoid then
+    begin
+      // Primitive type — compute size directly
+      if LElemVT in [gvtInt8, gvtUInt8] then
+        Result := FBackend.Int64(1)
+      else if LElemVT in [gvtInt16, gvtUInt16] then
+        Result := FBackend.Int64(2)
+      else if LElemVT in [gvtInt32, gvtUInt32, gvtFloat32] then
+        Result := FBackend.Int64(4)
+      else
+        Result := FBackend.Int64(8);
+    end
+    else if FBackend.FindType(LText) >= 0 then
+      // Named composite type — ask backend for its size
+      Result := FBackend.Int64(FBackend.GetTypeSize(FBackend.TypeRef(LText)))
+    else
+      // Unknown type — could be a variable name; look up its type
+      Result := FBackend.Int64(8); // fallback to pointer size
+  end
+
+  // utf8() intrinsic — converts wstring to UTF-8 pointer via Gny_Utf8
+  else if LNode.Kind = nkUtf8 then
+  begin
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeft := EmitExpr(LNode.Children[0]);
+      Result := FBackend.Invoke('Gny_Utf8', [LLeft]);
+    end;
+  end
+
   // nil literal
   else if LNode.Kind = nkNilLit then
     Result := FBackend.Null()
@@ -2306,6 +2342,29 @@ begin
       end;
 
       Result := LSetExpr;
+    end;
+  end
+
+  // Type cast: int32(expr), float64(expr), pointer(expr), etc.
+  else if LNode.Kind = nkTypeCast then
+  begin
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeft := EmitExpr(LNode.Children[0]);
+      LElemVT := ResolveValueType(LNode.Text);
+
+      // Float-to-int conversion
+      if (LElemVT in [gvtInt8, gvtInt16, gvtInt32, gvtInt64,
+          gvtUInt8, gvtUInt16, gvtUInt32, gvtUInt64]) and
+         ChildIsFloat(LNode.Children[0]) then
+        Result := FBackend.Float64ToInt(LLeft)
+      // Int-to-float conversion
+      else if (LElemVT in [gvtFloat32, gvtFloat64]) and
+              (not ChildIsFloat(LNode.Children[0])) then
+        Result := FBackend.IntToFloat64(LLeft)
+      else
+        // Same category (int→int, float→float, pointer) — pass through
+        Result := LLeft;
     end;
   end;
 end;

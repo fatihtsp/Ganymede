@@ -1296,6 +1296,29 @@ begin
     Result := 'uint64';
   end
 
+  else if LNode.Kind = nkSize then
+  begin
+    // size(TypeExpr) — compile-time byte size, result is int64
+    Result := 'int64';
+  end
+
+  else if LNode.Kind = nkUtf8 then
+  begin
+    // utf8(wstring_expr) — resolve child, result is pointer to UTF-8
+    if Length(LNode.Children) > 0 then
+      ResolveExprType(LNode.Children[0]);
+    Result := 'pointer';
+  end
+
+  else if LNode.Kind = nkTypeCast then
+  begin
+    // TypeCast: int32(expr) — resolve child, result is the target type
+    if Length(LNode.Children) > 0 then
+      ResolveExprType(LNode.Children[0]);
+    Result := LNode.Text;
+    StoreType(Result);
+  end
+
   else if LNode.Kind = nkNilLit then
     Result := 'pointer'
 

@@ -143,21 +143,22 @@
         <DCCReference Include="UDemo.Performance.pas"/>
         <DCCReference Include="UTest.Arrays.pas"/>
         <DCCReference Include="UTest.ChoicesSets.pas"/>
+        <DCCReference Include="UTest.ConditionalComp.pas"/>
         <DCCReference Include="UTest.Constants.pas"/>
         <DCCReference Include="UTest.ControlFlow.pas"/>
+        <DCCReference Include="UTest.GetMem.pas"/>
         <DCCReference Include="UTest.ImportClause.pas"/>
         <DCCReference Include="UTest.ImportHost.pas"/>
         <DCCReference Include="UTest.MatchStmt.pas"/>
         <DCCReference Include="UTest.NumericOps.pas"/>
+        <DCCReference Include="UTest.Overlays.pas"/>
         <DCCReference Include="UTest.Pointers.pas"/>
         <DCCReference Include="UTest.Records.pas"/>
+        <DCCReference Include="UTest.RoutineTypes.pas"/>
         <DCCReference Include="UTest.StringIO.pas"/>
         <DCCReference Include="UTest.VarAssign.pas"/>
-        <DCCReference Include="UTestbed.pas"/>
-        <DCCReference Include="UTest.Overlays.pas"/>
-        <DCCReference Include="UTest.RoutineTypes.pas"/>
         <DCCReference Include="UTest.VariadicArgs.pas"/>
-        <DCCReference Include="UTest.ConditionalComp.pas"/>
+        <DCCReference Include="UTestbed.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

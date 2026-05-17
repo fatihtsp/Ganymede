@@ -42,21 +42,22 @@ uses
   UDemo.Performance in 'UDemo.Performance.pas',
   UTest.Arrays in 'UTest.Arrays.pas',
   UTest.ChoicesSets in 'UTest.ChoicesSets.pas',
+  UTest.ConditionalComp in 'UTest.ConditionalComp.pas',
   UTest.Constants in 'UTest.Constants.pas',
   UTest.ControlFlow in 'UTest.ControlFlow.pas',
+  UTest.GetMem in 'UTest.GetMem.pas',
   UTest.ImportClause in 'UTest.ImportClause.pas',
   UTest.ImportHost in 'UTest.ImportHost.pas',
   UTest.MatchStmt in 'UTest.MatchStmt.pas',
   UTest.NumericOps in 'UTest.NumericOps.pas',
+  UTest.Overlays in 'UTest.Overlays.pas',
   UTest.Pointers in 'UTest.Pointers.pas',
   UTest.Records in 'UTest.Records.pas',
+  UTest.RoutineTypes in 'UTest.RoutineTypes.pas',
   UTest.StringIO in 'UTest.StringIO.pas',
   UTest.VarAssign in 'UTest.VarAssign.pas',
-  UTestbed in 'UTestbed.pas',
-  UTest.Overlays in 'UTest.Overlays.pas',
-  UTest.RoutineTypes in 'UTest.RoutineTypes.pas',
   UTest.VariadicArgs in 'UTest.VariadicArgs.pas',
-  UTest.ConditionalComp in 'UTest.ConditionalComp.pas';
+  UTestbed in 'UTestbed.pas';
 
 begin
   RunTestbed();

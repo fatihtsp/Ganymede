@@ -1964,6 +1964,29 @@ begin
     Expect(tkRParen);
   end
 
+  // size() intrinsic — size(TypeExpr) returns byte size at compile time
+  else if LTok.Kind = tkSize then
+  begin
+    Advance();
+    LLeft := AddNode(nkSize, LTok.Range);
+    Expect(tkLParen);
+    LNode := FNodes[LLeft];
+    LNode.Text := ParseTypeExpr();
+    FNodes[LLeft] := LNode;
+    Expect(tkRParen);
+  end
+
+  // utf8() intrinsic — utf8(wstring_expr) converts wstring to UTF-8 pointer
+  else if LTok.Kind = tkUtf8 then
+  begin
+    Advance();
+    LLeft := AddNode(nkUtf8, LTok.Range);
+    Expect(tkLParen);
+    LRight := ParseExpression(BP_NONE);
+    AddChild(LLeft, LRight);
+    Expect(tkRParen);
+  end
+
   // nil literal
   else if LTok.Kind = tkNil then
   begin
@@ -2046,6 +2069,23 @@ begin
       Expect(tkRParen);
     end;
     // 'count' has no parentheses
+  end
+
+  // Type cast: int32(expr), float64(expr), pointer(expr), etc.
+  else if LTok.Kind in [tkInt8, tkInt16, tkInt32, tkInt64,
+    tkUInt8, tkUInt16, tkUInt32, tkUInt64,
+    tkFloat32, tkFloat64, tkBoolean,
+    tkChar, tkWChar, tkString, tkWString, tkPointer] then
+  begin
+    Advance();
+    LLeft := AddNode(nkTypeCast, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text; // type name e.g. 'int32'
+    FNodes[LLeft] := LNode;
+    Expect(tkLParen);
+    LRight := ParseExpression(BP_NONE);
+    AddChild(LLeft, LRight);
+    Expect(tkRParen);
   end
 
   else

@@ -1,0 +1,92 @@
+module mem test_mem_intrinsics;
+
+// ==========================================================================
+// size() — primitive types
+// ==========================================================================
+
+public routine test_size_i8(): int64;
+begin
+  return size(int8);
+end;
+
+public routine test_size_i16(): int64;
+begin
+  return size(int16);
+end;
+
+public routine test_size_i32(): int64;
+begin
+  return size(int32);
+end;
+
+public routine test_size_i64(): int64;
+begin
+  return size(int64);
+end;
+
+public routine test_size_f32(): int64;
+begin
+  return size(float32);
+end;
+
+public routine test_size_f64(): int64;
+begin
+  return size(float64);
+end;
+
+public routine test_size_ptr(): int64;
+begin
+  return size(pointer);
+end;
+
+public routine test_size_bool(): int64;
+begin
+  return size(boolean);
+end;
+
+// ==========================================================================
+// size() — record type
+// ==========================================================================
+
+type
+  TPoint = record
+    x: int32;
+    y: int32;
+  end;
+
+public routine test_size_record(): int64;
+begin
+  return size(TPoint);
+end;
+
+// ==========================================================================
+// size() — used in getmem for manual allocation
+// ==========================================================================
+
+public routine test_size_in_expr(): int32;
+var
+  s: int64;
+begin
+  s := size(int32) + size(int64);
+  return int32(s);
+end;
+
+// ==========================================================================
+// utf8() — convert wstring to UTF-8, check non-nil
+// ==========================================================================
+
+public routine test_utf8_nonnull(): int32;
+var
+  ws: wstring;
+  p: pointer;
+begin
+  ws := w"Hello";
+  p := utf8(ws);
+  if p <> nil then
+    return 1;
+  end;
+  return 0;
+end;
+
+
+end.
