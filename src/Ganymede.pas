@@ -94,6 +94,7 @@ type
     FJIT: TGnyJIT;
     FHostImports: TList<TGnyHostImport>;
     FLibPaths: TStringList;
+    FDefines: TDictionary<string, string>;
     FSource: string;
     FFilename: string;
     FOptimizationLevel: TGnyOptLevel;
@@ -106,6 +107,8 @@ type
     {$HINTS ON}
     procedure ResetBackend();
     procedure ProcessImports();
+    procedure SetupPredefinedDefines();
+    function PreprocessDirectives(): Boolean;
 
   public
     constructor Create(); override;
@@ -134,6 +137,11 @@ type
 
     // Compile — lex + parse + semantic + emit + build (routes by module kind)
     function Compile(): Boolean;
+
+    // Conditional compilation defines
+    procedure SetDefine(const AName: string; const AValue: string);
+    procedure Undefine(const AName: string);
+    function IsDefined(const AName: string): Boolean;
 
     // Symbol access (forwarded from JIT)
     function GetSymbol(const AName: string): Pointer;
@@ -194,6 +202,7 @@ begin
     FLibPaths := TStringList.Create();
     FLibPaths.CaseSensitive := False;
     FLibPaths.Duplicates := dupIgnore;
+    FDefines := TDictionary<string, string>.Create();
   except
     on E: Exception do
     begin
@@ -210,6 +219,7 @@ end;
 destructor TGanymede.Destroy();
 begin
   FreeAndNil(FJIT);
+  FreeAndNil(FDefines);
   FreeAndNil(FLibPaths);
   FreeAndNil(FHostImports);
   FreeAndNil(FBackend);
@@ -599,6 +609,343 @@ begin
   end;
 end;
 
+//------------------------------------------------------------------------------
+// Conditional compilation — public API
+//------------------------------------------------------------------------------
+
+procedure TGanymede.SetDefine(const AName: string; const AValue: string);
+begin
+  FDefines.AddOrSetValue(AName, AValue);
+end;
+
+procedure TGanymede.Undefine(const AName: string);
+begin
+  FDefines.Remove(AName);
+end;
+
+function TGanymede.IsDefined(const AName: string): Boolean;
+begin
+  Result := FDefines.ContainsKey(AName);
+end;
+
+//------------------------------------------------------------------------------
+// Populates FDefines with platform, engine, module-kind, optimization, and
+// app-type symbols. Called at the start of Compile() after lexing so the
+// module kind can be read from the token stream. Mutually exclusive pairs
+// (DEBUG/RELEASE, BUILD_*, APPTYPE_*) are cleared before setting.
+//------------------------------------------------------------------------------
+
+procedure TGanymede.SetupPredefinedDefines();
+var
+  LModuleKind: string;
+  LAppType: TGnyAppType;
+begin
+  // Engine identity
+  SetDefine('GANYMEDE', '1');
+
+  // Platform symbols (Win64-only target)
+  SetDefine('WINDOWS', '1');
+  SetDefine('MSWINDOWS', '1');
+  SetDefine('WIN64', '1');
+  SetDefine('TARGET_WIN64', '1');
+  SetDefine('CPUX64', '1');
+
+  // Optimization level — clear both, then set the correct one
+  Undefine('DEBUG');
+  Undefine('RELEASE');
+  if FOptimizationLevel = olNone then
+    SetDefine('DEBUG', '1')
+  else
+    SetDefine('RELEASE', '1');
+
+  // Module-kind symbols — clear all, then set the correct one
+  Undefine('BUILD_EXE');
+  Undefine('BUILD_DLL');
+  Undefine('BUILD_LIB');
+  Undefine('BUILD_MEM');
+  LModuleKind := '';
+  if (FLexer.Tokens.Count >= 2) and (FLexer.Tokens[0].Kind = tkModule) then
+    LModuleKind := FLexer.Tokens[1].Text;
+  if LModuleKind = 'exe' then
+    SetDefine('BUILD_EXE', '1')
+  else if LModuleKind = 'dll' then
+    SetDefine('BUILD_DLL', '1')
+  else if LModuleKind = 'lib' then
+    SetDefine('BUILD_LIB', '1')
+  else if LModuleKind = 'mem' then
+    SetDefine('BUILD_MEM', '1');
+
+  // App type — query host executable PE header
+  Undefine('APPTYPE_CONSOLE');
+  Undefine('APPTYPE_GUI');
+  LAppType := TGnyUtils.GetAppType();
+  if LAppType = atConsole then
+    SetDefine('APPTYPE_CONSOLE', '1')
+  else if LAppType = atGUI then
+    SetDefine('APPTYPE_GUI', '1');
+end;
+
+//------------------------------------------------------------------------------
+// Conditional compilation preprocessor
+//
+// Walks the token stream after lexing, evaluates @ifdef/@ifndef/@elseif/@else/
+// @endif/@define/@undef directives, and removes tokens inside false branches
+// plus the directive tokens themselves. Platform and module-kind symbols are
+// predefined. Returns True if no errors.
+//------------------------------------------------------------------------------
+
+function TGanymede.PreprocessDirectives(): Boolean;
+const
+  // Error codes for conditional compilation
+  GNY_ERROR_COND_MISSING_ARG  = 'SC0001';
+  GNY_ERROR_COND_UNMATCHED    = 'SC0002';
+  GNY_ERROR_COND_DUPLICATE    = 'SC0003';
+  GNY_ERROR_COND_UNTERMINATED = 'SC0004';
+type
+  TCondState = record
+    Active: Boolean;    // is this branch currently emitting tokens?
+    HadTrue: Boolean;   // has any branch in this if/elseif/else chain been true?
+    HadElse: Boolean;   // have we seen @else already?
+    ParentActive: Boolean; // was the enclosing level active?
+  end;
+var
+  LTokens: TList<TGnyScriptToken>;
+  LCondStack: TList<TCondState>;
+  LFiltered: TList<TGnyScriptToken>;
+  LI: Integer;
+  LTok: TGnyScriptToken;
+  LDirName: string;
+  LSymbol: string;
+  LState: TCondState;
+  LTopActive: Boolean;
+
+  // Returns True if all conditional levels are active (i.e. we should emit tokens)
+  function IsEmitting(): Boolean;
+  var
+    LIdx: Integer;
+  begin
+    Result := True;
+    for LIdx := 0 to LCondStack.Count - 1 do
+    begin
+      if not LCondStack[LIdx].Active then
+      begin
+        Result := False;
+        Exit;
+      end;
+    end;
+  end;
+
+  // Reads the identifier token following a directive; returns '' on error
+  function ReadSymbolArg(const ADirName: string): string;
+  begin
+    Result := '';
+    Inc(LI); // move past the directive token
+    if (LI < LTokens.Count) and (LTokens[LI].Kind = tkIdent) then
+      Result := LTokens[LI].Text
+    else
+    begin
+      FErrors.Add(LTok.Range, esError, GNY_ERROR_COND_MISSING_ARG,
+        RSScriptCondMissingArg, [ADirName]);
+    end;
+  end;
+
+begin
+  LTokens := FLexer.Tokens;
+
+  // Quick scan: if no directives at all, skip preprocessing entirely
+  LI := 0;
+  while LI < LTokens.Count do
+  begin
+    if LTokens[LI].Kind = tkDirective then
+      Break;
+    Inc(LI);
+  end;
+  if LI >= LTokens.Count then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  LCondStack := TList<TCondState>.Create();
+  LFiltered := TList<TGnyScriptToken>.Create();
+  try
+    // Walk the token stream
+    LI := 0;
+    while LI < LTokens.Count do
+    begin
+      LTok := LTokens[LI];
+
+      if LTok.Kind = tkDirective then
+      begin
+        // Extract directive name without '@' prefix
+        LDirName := LTok.Text;
+        if (LDirName.Length > 1) and (LDirName[1] = '@') then
+          LDirName := LDirName.Substring(1);
+
+        // --- @define SYMBOL ---
+        if LDirName = 'define' then
+        begin
+          LSymbol := ReadSymbolArg('define');
+          if LSymbol <> '' then
+          begin
+            // Only apply if currently emitting
+            if IsEmitting() then
+              SetDefine(LSymbol, '1');
+          end;
+          Inc(LI);
+          Continue;
+        end
+
+        // --- @undef SYMBOL ---
+        else if LDirName = 'undef' then
+        begin
+          LSymbol := ReadSymbolArg('undef');
+          if LSymbol <> '' then
+          begin
+            if IsEmitting() then
+              Undefine(LSymbol);
+          end;
+          Inc(LI);
+          Continue;
+        end
+
+        // --- @ifdef SYMBOL ---
+        else if LDirName = 'ifdef' then
+        begin
+          LSymbol := ReadSymbolArg('ifdef');
+          LTopActive := IsEmitting() and IsDefined(LSymbol);
+          LState := Default(TCondState);
+          LState.Active := LTopActive;
+          LState.HadTrue := LTopActive;
+          LState.HadElse := False;
+          LState.ParentActive := IsEmitting();
+          LCondStack.Add(LState);
+          Inc(LI);
+          Continue;
+        end
+
+        // --- @ifndef SYMBOL ---
+        else if LDirName = 'ifndef' then
+        begin
+          LSymbol := ReadSymbolArg('ifndef');
+          LTopActive := IsEmitting() and (not IsDefined(LSymbol));
+          LState := Default(TCondState);
+          LState.Active := LTopActive;
+          LState.HadTrue := LTopActive;
+          LState.HadElse := False;
+          LState.ParentActive := IsEmitting();
+          LCondStack.Add(LState);
+          Inc(LI);
+          Continue;
+        end
+
+        // --- @elseif SYMBOL ---
+        else if LDirName = 'elseif' then
+        begin
+          LSymbol := ReadSymbolArg('elseif');
+          if LCondStack.Count = 0 then
+          begin
+            FErrors.Add(LTok.Range, esError, GNY_ERROR_COND_UNMATCHED,
+              RSScriptCondUnmatched, ['elseif']);
+            Inc(LI);
+            Continue;
+          end;
+          LState := LCondStack[LCondStack.Count - 1];
+          if LState.HadElse then
+          begin
+            FErrors.Add(LTok.Range, esError, GNY_ERROR_COND_DUPLICATE,
+              RSScriptCondDuplicate, []);
+            Inc(LI);
+            Continue;
+          end;
+          // Activate this branch only if parent is active, no prior branch was true,
+          // and the symbol is defined
+          LState.Active := LState.ParentActive and (not LState.HadTrue) and
+            IsDefined(LSymbol);
+          if LState.Active then
+            LState.HadTrue := True;
+          LCondStack[LCondStack.Count - 1] := LState;
+          Inc(LI);
+          Continue;
+        end
+
+        // --- @else ---
+        else if LDirName = 'else' then
+        begin
+          if LCondStack.Count = 0 then
+          begin
+            FErrors.Add(LTok.Range, esError, GNY_ERROR_COND_UNMATCHED,
+              RSScriptCondUnmatched, ['else']);
+            Inc(LI);
+            Continue;
+          end;
+          LState := LCondStack[LCondStack.Count - 1];
+          if LState.HadElse then
+          begin
+            FErrors.Add(LTok.Range, esError, GNY_ERROR_COND_DUPLICATE,
+              RSScriptCondDuplicate, []);
+            Inc(LI);
+            Continue;
+          end;
+          LState.HadElse := True;
+          // Activate @else only if parent is active and no prior branch was true
+          LState.Active := LState.ParentActive and (not LState.HadTrue);
+          if LState.Active then
+            LState.HadTrue := True;
+          LCondStack[LCondStack.Count - 1] := LState;
+          Inc(LI);
+          Continue;
+        end
+
+        // --- @endif ---
+        else if LDirName = 'endif' then
+        begin
+          if LCondStack.Count = 0 then
+          begin
+            FErrors.Add(LTok.Range, esError, GNY_ERROR_COND_UNMATCHED,
+              RSScriptCondUnmatched, ['endif']);
+            Inc(LI);
+            Continue;
+          end;
+          LCondStack.Delete(LCondStack.Count - 1);
+          Inc(LI);
+          Continue;
+        end
+        else
+        begin
+          // Unknown directive — leave in stream for future handling
+          if IsEmitting() then
+            LFiltered.Add(LTok);
+          Inc(LI);
+          Continue;
+        end;
+      end;
+
+      // Non-directive token: keep only if all conditional levels are active
+      if IsEmitting() then
+        LFiltered.Add(LTok);
+      Inc(LI);
+    end;
+
+    // Check for unterminated conditional blocks
+    if LCondStack.Count > 0 then
+    begin
+      FErrors.Add(LTokens[LTokens.Count - 1].Range, esError,
+        GNY_ERROR_COND_UNTERMINATED, RSScriptCondUnterminated, []);
+    end;
+
+    // Replace the token list with the filtered result
+    LTokens.Clear();
+    for LI := 0 to LFiltered.Count - 1 do
+      LTokens.Add(LFiltered[LI]);
+
+    Result := FErrors.ErrorCount() = 0;
+  finally
+    LFiltered.Free();
+    LCondStack.Free();
+  end;
+end;
+
 function TGanymede.SetOutputPath(const APath: string): TGanymede;
 begin
   FOutputPath := APath;
@@ -633,6 +980,11 @@ begin
 
   // Phase 1: Lex
   if not FLexer.Tokenize(FSource, FFilename) then
+    Exit;
+
+  // Phase 1b: Setup predefined defines and preprocess conditional directives
+  SetupPredefinedDefines();
+  if not PreprocessDirectives() then
     Exit;
 
   // Phase 2: Parse

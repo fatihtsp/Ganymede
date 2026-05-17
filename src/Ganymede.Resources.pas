@@ -496,6 +496,15 @@ resourcestring
   RSScriptNoFieldAccess       = 'Cannot access field on type %s';
 
   //--------------------------------------------------------------------------
+  // Script Conditional Compilation Error Messages
+  //--------------------------------------------------------------------------
+  RSScriptCondMissingArg       = '@%s requires an identifier argument';
+  RSScriptCondUnmatched        = 'Unmatched @%s without matching @ifdef/@ifndef';
+  RSScriptCondDuplicate        = 'Duplicate @else in conditional block';
+  RSScriptCondUnterminated     = 'Unterminated conditional block (missing @endif)';
+  RSScriptCondUnknownDirective = 'Unknown directive: ''@%s''';
+
+  //--------------------------------------------------------------------------
   // Script IR Lowering Error Messages
   //--------------------------------------------------------------------------
   RSScriptIRUnsupportedNode   = 'Unsupported AST node in IR lowering: %s';

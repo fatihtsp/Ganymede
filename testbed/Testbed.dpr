@@ -55,7 +55,8 @@ uses
   UTestbed in 'UTestbed.pas',
   UTest.Overlays in 'UTest.Overlays.pas',
   UTest.RoutineTypes in 'UTest.RoutineTypes.pas',
-  UTest.VariadicArgs in 'UTest.VariadicArgs.pas';
+  UTest.VariadicArgs in 'UTest.VariadicArgs.pas',
+  UTest.ConditionalComp in 'UTest.ConditionalComp.pas';
 
 begin
   RunTestbed();

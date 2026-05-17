@@ -110,6 +110,13 @@ type
     pxlMsgError
   );
 
+  { TGnyAppType — host executable subsystem }
+  TGnyAppType = (
+    atUnknown,
+    atConsole,
+    atGUI
+  );
+
   { TGnyUtils }
   TGnyUtils = class
   private class var
@@ -178,6 +185,7 @@ type
     class function  HasEnv(const AName: string): Boolean; static;
     class function  RunFromIDE(): Boolean; static;
     class function  CountLines(const APath, APattern: string; const ARecursive: Boolean = True): Int64; static;
+    class function  GetAppType(): TGnyAppType; static;
 
   end;
 
@@ -2000,6 +2008,28 @@ begin
   begin
     LLines := TFile.ReadAllLines(LFiles[LI]);
     Result := Result + Length(LLines);
+  end;
+end;
+
+class function TGnyUtils.GetAppType(): TGnyAppType;
+var
+  LBase: PByte;
+  LDosHeader: PImageDosHeader;
+  LNtHeaders: PImageNtHeaders;
+begin
+  Result := atUnknown;
+  try
+    LBase := PByte(GetModuleHandle(nil));
+    if LBase = nil then
+      Exit;
+    LDosHeader := PImageDosHeader(LBase);
+    LNtHeaders := PImageNtHeaders(LBase + LDosHeader._lfanew);
+    if LNtHeaders.OptionalHeader.Subsystem = IMAGE_SUBSYSTEM_WINDOWS_CUI then
+      Result := atConsole
+    else if LNtHeaders.OptionalHeader.Subsystem = IMAGE_SUBSYSTEM_WINDOWS_GUI then
+      Result := atGUI;
+  except
+    // PE header read failed — return atUnknown
   end;
 end;
 

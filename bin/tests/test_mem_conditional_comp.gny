@@ -1,0 +1,304 @@
+module mem condcomp;
+
+// Test 1: @ifdef with platform symbol (WINDOWS always defined)
+@ifdef WINDOWS
+public routine platform_check(): int32;
+begin
+  return 1;
+end;
+@else
+public routine platform_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 2: @ifndef with undefined symbol (LINUX not defined)
+@ifndef LINUX
+public routine ifndef_check(): int32;
+begin
+  return 1;
+end;
+@else
+public routine ifndef_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 3: @ifdef with undefined symbol, @else branch taken
+@ifdef LINUX
+public routine else_check(): int32;
+begin
+  return 0;
+end;
+@else
+public routine else_check(): int32;
+begin
+  return 2;
+end;
+@endif
+
+// Test 4: @define + @ifdef with user-defined symbol
+@define MY_FEATURE
+@ifdef MY_FEATURE
+public routine define_check(): int32;
+begin
+  return 42;
+end;
+@else
+public routine define_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 5: @define + @undef + @ifdef — symbol removed
+@define TEMP_SYM
+@undef TEMP_SYM
+@ifdef TEMP_SYM
+public routine undef_check(): int32;
+begin
+  return 0;
+end;
+@else
+public routine undef_check(): int32;
+begin
+  return 99;
+end;
+@endif
+
+// Test 6: Nested conditionals — both WINDOWS and BUILD_MEM true
+@ifdef WINDOWS
+@ifdef BUILD_MEM
+public routine nested_check(): int32;
+begin
+  return 77;
+end;
+@else
+public routine nested_check(): int32;
+begin
+  return 0;
+end;
+@endif
+@else
+public routine nested_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 7: @elseif chain — LINUX false, WINDOWS true
+@ifdef LINUX
+public routine elseif_check(): int32;
+begin
+  return 0;
+end;
+@elseif WINDOWS
+public routine elseif_check(): int32;
+begin
+  return 55;
+end;
+@else
+public routine elseif_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 8: BUILD_MEM predefined for module mem
+@ifdef BUILD_MEM
+public routine buildmem_check(): int32;
+begin
+  return 1;
+end;
+@else
+public routine buildmem_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 9: GANYMEDE engine symbol always defined
+@ifdef GANYMEDE
+public routine ganymede_check(): int32;
+begin
+  return 1;
+end;
+@else
+public routine ganymede_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 10: DEBUG vs RELEASE — varies per optimization level
+// olNone → DEBUG defined → returns 1
+// olBasic/olFull → RELEASE defined → returns 2
+@ifdef DEBUG
+public routine optlevel_check(): int32;
+begin
+  return 1;
+end;
+@else
+public routine optlevel_check(): int32;
+begin
+  return 2;
+end;
+@endif
+
+// Test 11: @ifndef with DEFINED symbol — should skip to @else
+@ifndef WINDOWS
+public routine ifndef_defined_check(): int32;
+begin
+  return 0;
+end;
+@else
+public routine ifndef_defined_check(): int32;
+begin
+  return 3;
+end;
+@endif
+
+// Test 12: @elseif where FIRST branch is true — second must NOT activate
+// WINDOWS is defined, so first branch wins; GANYMEDE branch must be skipped
+@ifdef WINDOWS
+public routine elseif_first_wins(): int32;
+begin
+  return 10;
+end;
+@elseif GANYMEDE
+public routine elseif_first_wins(): int32;
+begin
+  return 20;
+end;
+@else
+public routine elseif_first_wins(): int32;
+begin
+  return 30;
+end;
+@endif
+
+// Test 13: Nested with outer FALSE — inner block entirely skipped
+// @define inside a false block must NOT take effect
+@ifdef LINUX
+@define SHOULD_NOT_EXIST
+@ifdef WINDOWS
+public routine outer_false_check(): int32;
+begin
+  return 0;
+end;
+@endif
+@else
+@ifdef SHOULD_NOT_EXIST
+public routine outer_false_check(): int32;
+begin
+  return 0;
+end;
+@else
+public routine outer_false_check(): int32;
+begin
+  return 88;
+end;
+@endif
+@endif
+
+// Test 14: Multiple platform symbols — WIN64 and CPUX64
+// Adds values for each defined symbol to verify all platform defines
+@ifdef WIN64
+public routine platform_multi(): int32;
+var
+  r: int32;
+begin
+  r := 1;
+  @ifdef CPUX64
+  r := r + 2;
+  @endif
+  @ifdef TARGET_WIN64
+  r := r + 4;
+  @endif
+  @ifdef MSWINDOWS
+  r := r + 8;
+  @endif
+  return r;
+end;
+@else
+public routine platform_multi(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 15: @elseif chain where NO branch matches — @else taken
+@ifdef LINUX
+public routine elseif_none_match(): int32;
+begin
+  return 0;
+end;
+@elseif MACOS
+public routine elseif_none_match(): int32;
+begin
+  return 0;
+end;
+@else
+public routine elseif_none_match(): int32;
+begin
+  return 66;
+end;
+@endif
+
+// Test 16: @ifdef without @else — no code emitted for false, empty for true
+@define ACTIVE_FLAG
+@ifdef ACTIVE_FLAG
+public routine ifdef_no_else(): int32;
+begin
+  return 7;
+end;
+@endif
+
+// Test 17: APPTYPE_CONSOLE — testbed is a console app
+@ifdef APPTYPE_CONSOLE
+public routine apptype_check(): int32;
+begin
+  return 1;
+end;
+@else
+public routine apptype_check(): int32;
+begin
+  return 0;
+end;
+@endif
+
+// Test 18: Print detected build type and app type
+public routine print_defines();
+begin
+  @ifdef BUILD_EXE
+  writeln("  Build: EXE");
+  @elseif BUILD_DLL
+  writeln("  Build: DLL");
+  @elseif BUILD_LIB
+  writeln("  Build: LIB");
+  @elseif BUILD_MEM
+  writeln("  Build: MEM");
+  @else
+  writeln("  Build: UNKNOWN");
+  @endif
+
+  @ifdef APPTYPE_CONSOLE
+  writeln("  AppType: CONSOLE");
+  @elseif APPTYPE_GUI
+  writeln("  AppType: GUI");
+  @else
+  writeln("  AppType: UNKNOWN");
+  @endif
+
+  @ifdef DEBUG
+  writeln("  OptLevel: DEBUG");
+  @elseif RELEASE
+  writeln("  OptLevel: RELEASE");
+  @else
+  writeln("  OptLevel: UNKNOWN");
+  @endif
+end;
+
+end.

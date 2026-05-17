@@ -35,7 +35,8 @@ uses
   UTest.ChoicesSets,
   UTest.Overlays,
   UTest.RoutineTypes,
-  UTest.VariadicArgs;
+  UTest.VariadicArgs,
+  UTest.ConditionalComp;
 
 procedure Menu();
 var
@@ -81,7 +82,9 @@ begin
       .Add('Routine Types',
         procedure begin TGnyTestCase.Run(TScriptRoutineTypesTest) end)
       .Add('Variadic Arguments',
-        procedure begin TGnyTestCase.Run(TScriptVariadicArgsTest) end);
+        procedure begin TGnyTestCase.Run(TScriptVariadicArgsTest) end)
+      .Add('Conditional Compilation',
+        procedure begin TGnyTestCase.Run(TScriptConditionalCompTest) end);
     LMenu.Run();
   finally
     LMenu.Free();
