@@ -402,4 +402,224 @@ begin
   return r;
 end;
 
+// ==========================================================================
+// Dynamic array — setlength, write, read, sum
+// ==========================================================================
+
+public routine dynarr_basic(): int32;
+var
+  a: array of int32;
+  s: int32;
+begin
+  setlength(a, 5);
+  a[0] := 10;
+  a[1] := 20;
+  a[2] := 30;
+  a[3] := 40;
+  a[4] := 50;
+  s := a[0] + a[1] + a[2] + a[3] + a[4];
+  return s;
+end;
+
+// ==========================================================================
+// Dynamic array — len() intrinsic
+// ==========================================================================
+
+public routine dynarr_len(): int64;
+var
+  a: array of int32;
+begin
+  setlength(a, 10);
+  return len(a);
+end;
+
+// ==========================================================================
+// Dynamic array — len() on nil (before setlength)
+// ==========================================================================
+
+public routine dynarr_len_nil(): int64;
+var
+  a: array of int32;
+begin
+  return len(a);
+end;
+
+// ==========================================================================
+// Dynamic array — loop fill and sum
+// ==========================================================================
+
+public routine dynarr_loopsum(): int32;
+var
+  a: array of int32;
+  i: int32;
+  s: int32;
+begin
+  setlength(a, 10);
+  for i := 0 to 9 do
+    a[i] := (i + 1) * 10;
+  end;
+
+  s := 0;
+  for i := 0 to 9 do
+    s := s + a[i];
+  end;
+
+  return s;
+end;
+
+// ==========================================================================
+// Dynamic array — int64 elements
+// ==========================================================================
+
+public routine dynarr_i64(): int64;
+var
+  a: array of int64;
+begin
+  setlength(a, 3);
+  a[0] := 1000000000;
+  a[1] := 2000000000;
+  a[2] := 3000000000;
+  return a[0] + a[2];
+end;
+
+// ==========================================================================
+// Dynamic array — element overwrite
+// ==========================================================================
+
+public routine dynarr_overwrite(): int32;
+var
+  a: array of int32;
+begin
+  setlength(a, 2);
+  a[0] := 100;
+  a[1] := 200;
+  a[0] := 999;
+  a[1] := a[0] + 1;
+  return a[0] + a[1];
+end;
+
+// ==========================================================================
+// Dynamic array — setlength with expression
+// ==========================================================================
+
+public routine dynarr_expr_len(): int64;
+var
+  a: array of int32;
+  n: int32;
+begin
+  n := 3 + 2;
+  setlength(a, n);
+  return len(a);
+end;
+
+// ==========================================================================
+// Dynamic array — int8 elements
+// ==========================================================================
+
+public routine dynarr_i8(): int32;
+var
+  a: array of int8;
+begin
+  setlength(a, 3);
+  a[0] := 10;
+  a[1] := 20;
+  a[2] := 30;
+  return a[0] + a[2];
+end;
+
+// ==========================================================================
+// Dynamic array — float64 elements
+// ==========================================================================
+
+public routine dynarr_f64(): float64;
+var
+  a: array of float64;
+begin
+  setlength(a, 3);
+  a[0] := 10.25;
+  a[1] := 20.50;
+  a[2] := 30.75;
+  return a[0] + a[2];
+end;
+
+// ==========================================================================
+// Dynamic array — multiple arrays in one routine
+// ==========================================================================
+
+public routine dynarr_multi(): int64;
+var
+  a: array of int32;
+  b: array of int64;
+begin
+  setlength(a, 2);
+  setlength(b, 2);
+  a[0] := 100;
+  a[1] := 200;
+  b[0] := 1000;
+  b[1] := 2000;
+  return a[0] + a[1] + b[0] + b[1];
+end;
+
+// ==========================================================================
+// Dynamic array — element arithmetic
+// ==========================================================================
+
+public routine dynarr_elemmath(): int32;
+var
+  a: array of int32;
+begin
+  setlength(a, 5);
+  a[0] := 10;
+  a[1] := 20;
+  a[2] := 30;
+  a[3] := 40;
+  a[4] := 50;
+  // (10 * 50) + (20 + 30 + 40) = 500 + 90 = 590
+  return a[0] * a[4] + a[1] + a[2] + a[3];
+end;
+
+// ==========================================================================
+// Dynamic array — element as function argument
+// ==========================================================================
+
+public routine dynarr_elemarg(): int32;
+var
+  a: array of int32;
+begin
+  setlength(a, 2);
+  a[0] := 42;
+  a[1] := 58;
+  return addtwo(a[0], a[1]);
+end;
+
+// ==========================================================================
+// Dynamic array — conditional on element
+// ==========================================================================
+
+public routine dynarr_condelem(): int32;
+var
+  a: array of int32;
+begin
+  setlength(a, 2);
+  a[0] := 10;
+  a[1] := 5;
+  if a[0] > a[1] then
+    return a[0];
+  else
+    return a[1];
+  end;
+end;
+
+// ==========================================================================
+// len() on managed string
+// ==========================================================================
+
+public routine len_string(): int64;
+var
+  s: string;
+begin
+  s := "hello";
+  return len(s);
+end;
+
 end.

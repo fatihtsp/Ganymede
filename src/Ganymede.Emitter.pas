@@ -62,6 +62,7 @@ type
     procedure EmitVarDecl(const AIndex: Integer);
     procedure EmitConstDecl(const AIndex: Integer);
     procedure EmitAssign(const AIndex: Integer);
+    procedure EmitSetLength(const AIndex: Integer);
     procedure EmitInlineArrayType(const ATypeName: string);
     function  EmitExpr(const AIndex: Integer): TGnyExpr;
 
@@ -444,6 +445,57 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// SetLength emission
+// setlength(arr, newlen) → Gny_SetLength(AddrOf(arr), newLen, elemSize)
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitSetLength(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LArrNode: TGnyScriptNode;
+  LVarName: string;
+  LElemTypeName: string;
+  LElemSize: Integer;
+  LNewLenExpr: TGnyExpr;
+  LElemVT: TGnyValueType;
+begin
+  LNode := FNodes[AIndex];
+  LArrNode := FNodes[LNode.Children[0]];
+  LVarName := LArrNode.Text;
+
+  // Resolve element type from the array type
+  LElemSize := 8; // default fallback
+  if FSemantics.FindArrayElementType(LArrNode.Extra, LElemTypeName) then
+  begin
+    LElemVT := ResolveValueType(LElemTypeName);
+    if LElemVT <> gvtVoid then
+    begin
+      // Primitive element type — compute size directly
+      if LElemVT in [gvtInt8, gvtUInt8] then
+        LElemSize := 1
+      else if LElemVT in [gvtInt16, gvtUInt16] then
+        LElemSize := 2
+      else if LElemVT in [gvtInt32, gvtUInt32, gvtFloat32] then
+        LElemSize := 4
+      else
+        LElemSize := 8;
+    end
+    else
+    begin
+      // Named composite type — ask backend
+      LElemSize := FBackend.GetTypeSize(FBackend.TypeRef(LElemTypeName));
+    end;
+  end;
+
+  LNewLenExpr := EmitExpr(LNode.Children[1]);
+
+  FBackend.Call('Gny_SetLength', [
+    FBackend.AddrOf(LVarName),
+    LNewLenExpr,
+    FBackend.Int64(LElemSize)]);
+end;
+
+//------------------------------------------------------------------------------
 // Inline array type auto-definition
 // Parses type strings like "array[0..9] of int32" or "array of int32"
 // and defines them on the backend if not already defined.
@@ -576,6 +628,12 @@ begin
           FBackend.Call(LFuncName);
       end;
     end;
+  end
+  else if LNode.Kind = nkSetLength then
+  begin
+    // setlength(arr, newlen) → Gny_SetLength(AddrOf(arr), newlen, elemSize)
+    if Length(LNode.Children) >= 2 then
+      EmitSetLength(AIndex);
   end
   else if LNode.Kind = nkBinary then
   begin
@@ -903,6 +961,10 @@ begin
   begin
     EmitInlineArrayType(LNode.Extra);
     FBackend.VarDecl(LNode.Text, LNode.Extra);
+
+    // Dynamic arrays (no brackets) start as nil pointers
+    if not LNode.Extra.Contains('[') then
+      FBackend.Let(LNode.Text, FBackend.Null());
   end
   // Record-typed variables use the string overload of VarDecl
   else if ResolveValueType(LNode.Extra) = gvtVoid then
@@ -1591,6 +1653,24 @@ begin
     end;
 
     Result := FBackend.Get(LTempName);
+  end
+
+  // len() intrinsic — dispatches via Gny_Len(tag, value)
+  else if LNode.Kind = nkLen then
+  begin
+    if Length(LNode.Children) > 0 then
+    begin
+      LLeft := EmitExpr(LNode.Children[0]);
+
+      // Determine type tag from child's resolved type
+      if FNodes[LNode.Children[0]].Extra = 'string' then
+        Result := FBackend.Invoke('Gny_Len', [FBackend.Int64(0), LLeft])
+      else if FNodes[LNode.Children[0]].Extra = 'wstring' then
+        Result := FBackend.Invoke('Gny_Len', [FBackend.Int64(1), LLeft])
+      else
+        // Dynamic array (type starts with "array of")
+        Result := FBackend.Invoke('Gny_Len', [FBackend.Int64(2), LLeft]);
+    end;
   end;
 end;
 

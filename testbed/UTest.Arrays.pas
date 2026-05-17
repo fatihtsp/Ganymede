@@ -1,4 +1,4 @@
-{===============================================================================
+﻿{===============================================================================
   Ganymede™ - Embeddable Native Scripting Engine
 
   Copyright © 2026-present tinyBigGAMES™ LLC
@@ -74,7 +74,7 @@ begin
       if not LScript.Compile() then
       begin
         FlushErrors(LScript.GetErrors());
-        WriteLn(LScript.GetSSADump());
+        //WriteLn(LScript.GetSSADump());
         Check(False, 'Compile failed (opt %d)', [LOrd]);
         Continue;
       end;
@@ -189,6 +189,76 @@ begin
       LI64 := LScript.Invoke('kitchensink', [], gvtInt64).AsInt64;
       Check(LI64 = 28,
         'kitchensink():int64 = %d (expected 28, opt %d)', [LI64, LOrd]);
+
+      // --- dynamic array: basic setlength + read/write ---
+      LI32 := LScript.Invoke('dynarr_basic', [], gvtInt32).AsInt32;
+      Check(LI32 = 150,
+        'dynarr_basic():int32 = %d (expected 150, opt %d)', [LI32, LOrd]);
+
+      // --- dynamic array: len() intrinsic ---
+      LI64 := LScript.Invoke('dynarr_len', [], gvtInt64).AsInt64;
+      Check(LI64 = 10,
+        'dynarr_len():int64 = %d (expected 10, opt %d)', [LI64, LOrd]);
+
+      // --- dynamic array: len() on nil (before setlength) ---
+      LI64 := LScript.Invoke('dynarr_len_nil', [], gvtInt64).AsInt64;
+      Check(LI64 = 0,
+        'dynarr_len_nil():int64 = %d (expected 0, opt %d)', [LI64, LOrd]);
+
+      // --- dynamic array: loop fill + sum ---
+      LI32 := LScript.Invoke('dynarr_loopsum', [], gvtInt32).AsInt32;
+      Check(LI32 = 550,
+        'dynarr_loopsum():int32 = %d (expected 550, opt %d)', [LI32, LOrd]);
+
+      // --- dynamic array: int64 elements ---
+      LI64 := LScript.Invoke('dynarr_i64', [], gvtInt64).AsInt64;
+      Check(LI64 = 4000000000,
+        'dynarr_i64():int64 = %d (expected 4000000000, opt %d)', [LI64, LOrd]);
+
+      // --- dynamic array: element overwrite ---
+      LI32 := LScript.Invoke('dynarr_overwrite', [], gvtInt32).AsInt32;
+      Check(LI32 = 1999,
+        'dynarr_overwrite():int32 = %d (expected 1999, opt %d)', [LI32, LOrd]);
+
+      // --- dynamic array: setlength with expression ---
+      LI64 := LScript.Invoke('dynarr_expr_len', [], gvtInt64).AsInt64;
+      Check(LI64 = 5,
+        'dynarr_expr_len():int64 = %d (expected 5, opt %d)', [LI64, LOrd]);
+
+      // --- dynamic array: int8 elements ---
+      LI32 := LScript.Invoke('dynarr_i8', [], gvtInt32).AsInt32;
+      Check(LI32 = 40,
+        'dynarr_i8():int32 = %d (expected 40, opt %d)', [LI32, LOrd]);
+
+      // --- dynamic array: float64 elements ---
+      LF64 := LScript.Invoke('dynarr_f64', [], gvtFloat64).AsFloat64;
+      Check(Abs(LF64 - 41.0) < 0.001,
+        'dynarr_f64():float64 = %.4f (expected 41.0, opt %d)', [LF64, LOrd]);
+
+      // --- dynamic array: multiple arrays ---
+      LI64 := LScript.Invoke('dynarr_multi', [], gvtInt64).AsInt64;
+      Check(LI64 = 3300,
+        'dynarr_multi():int64 = %d (expected 3300, opt %d)', [LI64, LOrd]);
+
+      // --- dynamic array: element arithmetic ---
+      LI32 := LScript.Invoke('dynarr_elemmath', [], gvtInt32).AsInt32;
+      Check(LI32 = 590,
+        'dynarr_elemmath():int32 = %d (expected 590, opt %d)', [LI32, LOrd]);
+
+      // --- dynamic array: element as function arg ---
+      LI32 := LScript.Invoke('dynarr_elemarg', [], gvtInt32).AsInt32;
+      Check(LI32 = 100,
+        'dynarr_elemarg():int32 = %d (expected 100, opt %d)', [LI32, LOrd]);
+
+      // --- dynamic array: conditional on element ---
+      LI32 := LScript.Invoke('dynarr_condelem', [], gvtInt32).AsInt32;
+      Check(LI32 = 10,
+        'dynarr_condelem():int32 = %d (expected 10, opt %d)', [LI32, LOrd]);
+
+      // --- len() on managed string ---
+      LI64 := LScript.Invoke('len_string', [], gvtInt64).AsInt64;
+      Check(LI64 = 5,
+        'len_string():int64 = %d (expected 5, opt %d)', [LI64, LOrd]);
 
     finally
       LScript.Free();

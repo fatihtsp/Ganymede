@@ -623,6 +623,14 @@ begin
   ResetBackend();
   FErrors.Clear();
 
+  // Guard: no source loaded
+  if FSource.Trim().IsEmpty() then
+  begin
+    FErrors.Add(FFilename, 1, 1, esError, 'GC0001',
+      'No source code loaded (call LoadFromFile or LoadFromString first)');
+    Exit;
+  end;
+
   // Phase 1: Lex
   if not FLexer.Tokenize(FSource, FFilename) then
     Exit;

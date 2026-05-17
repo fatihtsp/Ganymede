@@ -114,6 +114,7 @@ type
     function ParseLeaveStatement(): Integer;
     function ParseSkipStatement(): Integer;
     function ParseWriteStatement(): Integer;
+    function ParseSetLengthStatement(): Integer;
     function ParseVarBlock(const AParentNode: Integer): Integer;
     function ParseConstBlock(const AParentNode: Integer): Integer;
     function ParseTypeBlock(const AParentNode: Integer): Integer;
@@ -658,6 +659,8 @@ begin
     Result := ParseSkipStatement()
   else if (PeekKind() = tkWrite) or (PeekKind() = tkWriteLn) then
     Result := ParseWriteStatement()
+  else if PeekKind() = tkSetLength then
+    Result := ParseSetLengthStatement()
   else
   begin
     // Expression — then check for assignment operator
@@ -1099,6 +1102,34 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// SetLength statement: setlength(arr, newlen) ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseSetLengthStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LArgNode: Integer;
+begin
+  LTok := Advance(); // consume 'setlength'
+  Result := AddNode(nkSetLength, LTok.Range);
+
+  Expect(tkLParen);
+
+  // First argument: array variable
+  LArgNode := ParseExpression(BP_NONE);
+  AddChild(Result, LArgNode);
+
+  Expect(tkComma);
+
+  // Second argument: new length
+  LArgNode := ParseExpression(BP_NONE);
+  AddChild(Result, LArgNode);
+
+  Expect(tkRParen);
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
 // Return statement: return [expr] ;
 //------------------------------------------------------------------------------
 
@@ -1536,6 +1567,17 @@ begin
     FNodes[LLeft] := LNode;
     LRight := ParseExpression(BP_UNARY);
     AddChild(LLeft, LRight);
+  end
+
+  // len() intrinsic
+  else if LTok.Kind = tkLen then
+  begin
+    Advance();
+    LLeft := AddNode(nkLen, LTok.Range);
+    Expect(tkLParen);
+    LRight := ParseExpression(BP_NONE);
+    AddChild(LLeft, LRight);
+    Expect(tkRParen);
   end
 
   else

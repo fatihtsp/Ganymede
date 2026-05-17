@@ -630,6 +630,15 @@ begin
     for LI := 0 to Length(LNode.Children) - 1 do
       ResolveExprType(LNode.Children[LI]);
   end
+  else if LNode.Kind = nkSetLength then
+  begin
+    // setlength(arr, newlen) — validate arguments
+    if Length(LNode.Children) >= 2 then
+    begin
+      ResolveExprType(LNode.Children[0]); // array variable
+      ResolveExprType(LNode.Children[1]); // new length expression
+    end;
+  end
   else
     // Expression statement (call, etc.)
     ResolveExprType(AIndex);
@@ -1020,6 +1029,14 @@ begin
         FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
           RSScriptUndeclaredIdent, [LNode.Text]);
     end;
+  end
+
+  else if LNode.Kind = nkLen then
+  begin
+    // len(expr) — resolve child, result is always uint64
+    if Length(LNode.Children) > 0 then
+      ResolveExprType(LNode.Children[0]);
+    Result := 'uint64';
   end;
 
   // Store resolved type on the node for the emitter to read
