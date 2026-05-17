@@ -1,0 +1,148 @@
+module mem test_mem_overlays;
+
+// ==========================================================================
+// Basic overlay — int32 and float32 sharing same memory
+// ==========================================================================
+
+type
+  TIntFloat = overlay
+    asInt: int32;
+    asFloat: float32;
+  end;
+
+// Write as int, read back as int (sanity check)
+public routine overlay_int(): int32;
+var
+  u: TIntFloat;
+begin
+  u.asInt := 42;
+  return u.asInt;
+end;
+
+// Write as float, read back as float
+public routine overlay_float(): float32;
+var
+  u: TIntFloat;
+begin  u.asFloat := 3.14f;
+  return u.asFloat;
+end;
+
+// Write as int, read back as float — reinterpret cast
+// IEEE 754: 0x42280000 = 42.0f
+public routine overlay_reinterpret(): float32;
+var
+  u: TIntFloat;
+begin
+  u.asInt := 1109917696;
+  return u.asFloat;
+end;
+
+// ==========================================================================
+// Overlay with different-sized fields — size = max field
+// ==========================================================================
+
+type
+  TMixed = overlay
+    b: int8;
+    w: int16;
+    d: int32;
+    q: int64;
+  end;
+
+// Write int64, read back int64
+public routine overlay_i64(): int64;
+var  u: TMixed;
+begin
+  u.q := 1234567890123;
+  return u.q;
+end;
+
+// Write int8, read back int8
+public routine overlay_i8(): int8;
+var
+  u: TMixed;
+begin
+  u.b := 99;
+  return u.b;
+end;
+
+// ==========================================================================
+// Overlay with pointer field
+// ==========================================================================
+
+type
+  TPtrOrInt = overlay
+    asPtr: pointer;
+    asInt: int64;
+  end;
+
+public routine overlay_ptr(): int64;
+var
+  u: TPtrOrInt;
+begin
+  u.asInt := 0;  return u.asInt;
+end;
+
+// ==========================================================================
+// Record with anonymous overlay (C-style tagged union)
+// ==========================================================================
+
+type
+  TTaggedValue = record
+    tag: int32;
+    overlay
+      intVal: int32;
+      floatVal: float32;
+    end;
+  end;
+
+public routine tagged_int(): int32;
+var
+  v: TTaggedValue;
+begin
+  v.tag := 1;
+  v.intVal := 999;
+  return v.intVal;
+end;
+
+public routine tagged_tag(): int32;
+var
+  v: TTaggedValue;
+begin  v.tag := 2;
+  v.floatVal := 1.5f;
+  return v.tag;
+end;
+
+// ==========================================================================
+// Overlay with anonymous record (C-style union with struct arms)
+// ==========================================================================
+
+type
+  TEvent = overlay
+    record
+      x: int32;
+      y: int32;
+    end;
+    record
+      key: int32;
+      modifiers: int32;
+    end;
+  end;
+
+public routine event_xy(): int32;
+var
+  e: TEvent;
+begin
+  e.x := 100;
+  e.y := 200;
+  return e.x + e.y;
+end;
+public routine event_key(): int32;
+var
+  e: TEvent;
+begin
+  e.key := 65;
+  return e.key;
+end;
+
+end.

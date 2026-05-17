@@ -123,6 +123,7 @@ type
     function ParsePointerType(): Integer;
     function ParseChoicesType(): Integer;
     function ParseSetType(): Integer;
+    function ParseOverlayType(): Integer;
     function TryParseAssign(const ALhs: Integer): Integer;
 
     // Parsers — expressions (Pratt)
@@ -1334,6 +1335,13 @@ begin
       if LTypeDefNode >= 0 then
         AddChild(LTypeDeclNode, LTypeDefNode);
     end
+    // Overlay (union) type
+    else if PeekKind() = tkOverlay then
+    begin
+      LTypeDefNode := ParseOverlayType();
+      if LTypeDefNode >= 0 then
+        AddChild(LTypeDeclNode, LTypeDefNode);
+    end
     else
     begin
       FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
@@ -1398,28 +1406,94 @@ begin
     Expect(tkRParen);
   end;
 
-  // Parse field declarations until 'end'
+  // Parse field declarations and anonymous overlays until 'end'
   while (not AtEnd()) and (PeekKind() <> tkEnd) do
   begin
-    LFieldNameTok := Expect(tkIdent);
-    LFieldNode := AddNode(nkFieldDecl, LFieldNameTok.Range);
-    LNode := FNodes[LFieldNode];
-    LNode.Text := LFieldNameTok.Text;
-    FNodes[LFieldNode] := LNode;
+    // Anonymous overlay inside record
+    if PeekKind() = tkOverlay then
+    begin
+      LFieldNode := ParseOverlayType();
+      if LFieldNode >= 0 then
+        AddChild(LRecNode, LFieldNode);
+      // Anonymous overlays require trailing semicolon
+      Expect(tkSemicolon);
+    end
+    else
+    begin
+      LFieldNameTok := Expect(tkIdent);
+      LFieldNode := AddNode(nkFieldDecl, LFieldNameTok.Range);
+      LNode := FNodes[LFieldNode];
+      LNode.Text := LFieldNameTok.Text;
+      FNodes[LFieldNode] := LNode;
 
-    Expect(tkColon);
+      Expect(tkColon);
 
-    LNode := FNodes[LFieldNode];
-    LNode.Extra := ParseTypeExpr();
-    FNodes[LFieldNode] := LNode;
+      LNode := FNodes[LFieldNode];
+      LNode.Extra := ParseTypeExpr();
+      FNodes[LFieldNode] := LNode;
 
-    Expect(tkSemicolon);
-    AddChild(LRecNode, LFieldNode);
+      Expect(tkSemicolon);
+      AddChild(LRecNode, LFieldNode);
+    end;
   end;
 
   Expect(tkEnd);
 
   Result := LRecNode;
+end;
+
+//------------------------------------------------------------------------------
+// Overlay (union) type: overlay { FieldDecl | AnonRecord } end
+// AnonRecord = record [packed] { FieldDecl | AnonOverlay } end ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseOverlayType(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LOvlNode: Integer;
+  LNode: TGnyScriptNode;
+  LFieldNode: Integer;
+  LFieldNameTok: TGnyScriptToken;
+  LAnonRecNode: Integer;
+begin
+  LTok := Expect(tkOverlay);
+  LOvlNode := AddNode(nkOverlayType, LTok.Range);
+
+  // Parse field declarations and anonymous records until 'end'
+  while (not AtEnd()) and (PeekKind() <> tkEnd) do
+  begin
+    // Anonymous record inside overlay
+    if PeekKind() = tkRecord then
+    begin
+      LAnonRecNode := ParseRecordType();
+      if LAnonRecNode >= 0 then
+        AddChild(LOvlNode, LAnonRecNode);
+      // Anonymous records require trailing semicolon
+      Expect(tkSemicolon);
+    end
+    else
+    begin
+      // Field declaration: ident : TypeExpr ;
+      LFieldNameTok := Expect(tkIdent);
+      LFieldNode := AddNode(nkFieldDecl, LFieldNameTok.Range);
+      LNode := FNodes[LFieldNode];
+      LNode.Text := LFieldNameTok.Text;
+      FNodes[LFieldNode] := LNode;
+
+      Expect(tkColon);
+
+      LNode := FNodes[LFieldNode];
+      LNode.Extra := ParseTypeExpr();
+      FNodes[LFieldNode] := LNode;
+
+      Expect(tkSemicolon);
+      AddChild(LOvlNode, LFieldNode);
+    end;
+  end;
+
+  Expect(tkEnd);
+
+  Result := LOvlNode;
 end;
 
 //------------------------------------------------------------------------------

@@ -456,6 +456,7 @@ resourcestring
   RSScriptInvalidEscape       = 'Invalid escape sequence: ''\%s''';
   RSScriptInvalidHexLiteral   = 'Invalid hexadecimal literal';
   RSScriptInvalidNumberLit    = 'Invalid number literal';
+  RSScriptInvalidFloatLit     = 'Invalid float literal: ''%s''';
   RSScriptInvalidCharLit      = 'Invalid character literal';
   RSScriptEmptyCharLit        = 'Empty character literal';
 

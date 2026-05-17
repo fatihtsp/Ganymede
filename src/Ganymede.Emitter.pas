@@ -65,6 +65,8 @@ type
     procedure EmitSetLength(const AIndex: Integer);
     procedure EmitInlineArrayType(const ATypeName: string);
     function  EmitExpr(const AIndex: Integer): TGnyExpr;
+    procedure EmitAnonRecord(const AIndex: Integer);
+    procedure EmitAnonOverlay(const AIndex: Integer);
 
   public
     constructor Create(); override;
@@ -79,6 +81,7 @@ type
 
 const
   GNY_ERROR_SCRIPT_EMIT_MATCH = 'SE0001';
+  GNY_ERROR_SCRIPT_EMIT_FLOAT = 'SE0002';
 
 implementation
 
@@ -400,7 +403,7 @@ begin
     // Define the record on the backend
     FBackend.DefineRecord(LTypeName, LIsPacked, LExplicitAlign, LBaseType);
 
-    // Emit fields
+    // Emit fields and anonymous overlays
     for LI := 0 to Length(LRecNode.Children) - 1 do
     begin
       LFieldNode := FNodes[LRecNode.Children[LI]];
@@ -411,6 +414,11 @@ begin
           FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
         else
           FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+      end
+      else if LFieldNode.Kind = nkOverlayType then
+      begin
+        // Anonymous overlay inside record
+        EmitAnonOverlay(LRecNode.Children[LI]);
       end;
     end;
 
@@ -494,7 +502,104 @@ begin
       else
         FBackend.DefineSet(LTypeName);
     end;
+  end
+
+  // Overlay (union) type
+  else if FNodes[LNode.Children[0]].Kind = nkOverlayType then
+  begin
+    LRecNode := FNodes[LNode.Children[0]];
+
+    FBackend.DefineUnion(LTypeName);
+
+    // Emit fields and anonymous records
+    for LI := 0 to Length(LRecNode.Children) - 1 do
+    begin
+      LFieldNode := FNodes[LRecNode.Children[LI]];
+      if LFieldNode.Kind = nkFieldDecl then
+      begin
+        // Primitive or named type field
+        if ResolveValueType(LFieldNode.Extra) <> gvtVoid then
+          FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
+        else
+          FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+      end
+      else if LFieldNode.Kind = nkRecordType then
+      begin
+        // Anonymous record inside union
+        EmitAnonRecord(LRecNode.Children[LI]);
+      end;
+    end;
+
+    FBackend.EndUnion();
   end;
+end;
+
+//------------------------------------------------------------------------------
+// Anonymous record inside a union — BeginRecord / Field* / EndRecord
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitAnonRecord(const AIndex: Integer);
+var
+  LRecNode: TGnyScriptNode;
+  LFieldNode: TGnyScriptNode;
+  LI: Integer;
+begin
+  LRecNode := FNodes[AIndex];
+
+  FBackend.BeginRecord();
+
+  for LI := 0 to Length(LRecNode.Children) - 1 do
+  begin
+    LFieldNode := FNodes[LRecNode.Children[LI]];
+    if LFieldNode.Kind = nkFieldDecl then
+    begin
+      if ResolveValueType(LFieldNode.Extra) <> gvtVoid then
+        FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
+      else
+        FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+    end
+    else if LFieldNode.Kind = nkOverlayType then
+    begin
+      // Nested anonymous overlay inside anonymous record
+      EmitAnonOverlay(LRecNode.Children[LI]);
+    end;
+  end;
+
+  FBackend.EndRecord();
+end;
+
+//------------------------------------------------------------------------------
+// Anonymous overlay inside a record — BeginUnion / Field* / EndUnion
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitAnonOverlay(const AIndex: Integer);
+var
+  LOvlNode: TGnyScriptNode;
+  LFieldNode: TGnyScriptNode;
+  LI: Integer;
+begin
+  LOvlNode := FNodes[AIndex];
+
+  FBackend.BeginUnion();
+
+  for LI := 0 to Length(LOvlNode.Children) - 1 do
+  begin
+    LFieldNode := FNodes[LOvlNode.Children[LI]];
+    if LFieldNode.Kind = nkFieldDecl then
+    begin
+      if ResolveValueType(LFieldNode.Extra) <> gvtVoid then
+        FBackend.Field(LFieldNode.Text, ResolveValueType(LFieldNode.Extra))
+      else
+        FBackend.Field(LFieldNode.Text, LFieldNode.Extra);
+    end
+    else if LFieldNode.Kind = nkRecordType then
+    begin
+      // Nested anonymous record inside anonymous overlay
+      EmitAnonRecord(LOvlNode.Children[LI]);
+    end;
+  end;
+
+  FBackend.EndUnion();
 end;
 
 //------------------------------------------------------------------------------
@@ -1395,6 +1500,7 @@ var
   LRightFloat: Boolean;
   LInt64Val: Int64;
   LFmt: TFormatSettings;
+  LText: string;
   LSetTypeName: string;
   LSetChild: TGnyScriptNode;
   LSetExpr: TGnyExpr;
@@ -1457,7 +1563,24 @@ begin
   begin
     LFmt := Default(TFormatSettings);
     LFmt.DecimalSeparator := '.';
-    Result := FBackend.Float64(StrToFloat(LNode.Text, LFmt));
+    LText := LNode.Text;
+    try
+      // Float32 suffix: 3.14f → Float32(3.14)
+      if LText.EndsWith('f', True) then
+      begin
+        LText := LText.Substring(0, LText.Length - 1);
+        Result := FBackend.Float32(Single(StrToFloat(LText, LFmt)));
+      end
+      else
+        Result := FBackend.Float64(StrToFloat(LText, LFmt));
+    except
+      on E: Exception do
+      begin
+        FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_EMIT_FLOAT,
+          RSScriptInvalidFloatLit, [LNode.Text]);
+        Exit;
+      end;
+    end;
   end
 
   // String literal

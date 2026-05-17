@@ -96,6 +96,7 @@ type
     FPointerTypes: TDictionary<string, string>; // type name → pointee type name
     FChoicesTypes: TDictionary<string, TArray<TGnyScriptChoicesValueInfo>>;
     FSetTypes: TDictionary<string, TGnyScriptSetTypeInfo>;
+    FOverlayTypes: TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>;
     FLoopDepth: Integer;
 
     // Scope management
@@ -167,6 +168,10 @@ type
     function IsSetType(const ATypeName: string): Boolean;
     function GetSetTypeInfo(const ATypeName: string;
       var AInfo: TGnyScriptSetTypeInfo): Boolean;
+
+    // Overlay (union) type lookup (for emitter)
+    function IsOverlayType(const ATypeName: string): Boolean;
+    function GetOverlayFields(const ATypeName: string): TArray<TGnyScriptRecordFieldInfo>;
   end;
 
 const
@@ -245,6 +250,7 @@ begin
     FPointerTypes := TDictionary<string, string>.Create();
     FChoicesTypes := TDictionary<string, TArray<TGnyScriptChoicesValueInfo>>.Create();
     FSetTypes := TDictionary<string, TGnyScriptSetTypeInfo>.Create();
+    FOverlayTypes := TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>.Create();
   except
     on E: Exception do
     begin
@@ -256,6 +262,7 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FOverlayTypes.Free();
   FSetTypes.Free();
   FChoicesTypes.Free();
   FPointerTypes.Free();
@@ -967,6 +974,31 @@ begin
     end;
 
     FSetTypes.AddOrSetValue(LNode.Text, LSetInfo);
+  end
+
+  // If child is nkOverlayType, collect field metadata
+  else if (Length(LNode.Children) > 0) and
+     (FNodes[LNode.Children[0]].Kind = nkOverlayType) then
+  begin
+    LRecNode := FNodes[LNode.Children[0]];
+    LFieldCount := 0;
+    SetLength(LFields, Length(LRecNode.Children));
+
+    for LI := 0 to Length(LRecNode.Children) - 1 do
+    begin
+      LFieldNode := FNodes[LRecNode.Children[LI]];
+      if LFieldNode.Kind = nkFieldDecl then
+      begin
+        LFieldInfo := Default(TGnyScriptRecordFieldInfo);
+        LFieldInfo.FieldName := LFieldNode.Text;
+        LFieldInfo.FieldTypeName := LFieldNode.Extra;
+        LFields[LFieldCount] := LFieldInfo;
+        Inc(LFieldCount);
+      end;
+    end;
+    SetLength(LFields, LFieldCount);
+
+    FOverlayTypes.AddOrSetValue(LNode.Text, LFields);
   end;
 end;
 
@@ -1246,8 +1278,10 @@ var
   LI: Integer;
 begin
   Result := False;
+  // Search records first, then overlays
   if not FRecordTypes.TryGetValue(ATypeName, LFields) then
-    Exit;
+    if not FOverlayTypes.TryGetValue(ATypeName, LFields) then
+      Exit;
 
   for LI := 0 to Length(LFields) - 1 do
   begin
@@ -1370,6 +1404,22 @@ begin
     end;
     Result := True;
   end;
+end;
+
+//------------------------------------------------------------------------------
+// Overlay (union) type lookup (for emitter)
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.IsOverlayType(const ATypeName: string): Boolean;
+begin
+  Result := FOverlayTypes.ContainsKey(ATypeName);
+end;
+
+function TGnyScriptSemantics.GetOverlayFields(
+  const ATypeName: string): TArray<TGnyScriptRecordFieldInfo>;
+begin
+  if not FOverlayTypes.TryGetValue(ATypeName, Result) then
+    Result := nil;
 end;
 
 end.

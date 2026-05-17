@@ -52,7 +52,8 @@ uses
   UTest.Records in 'UTest.Records.pas',
   UTest.StringIO in 'UTest.StringIO.pas',
   UTest.VarAssign in 'UTest.VarAssign.pas',
-  UTestbed in 'UTestbed.pas';
+  UTestbed in 'UTestbed.pas',
+  UTest.Overlays in 'UTest.Overlays.pas';
 
 begin
   RunTestbed();
