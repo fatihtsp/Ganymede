@@ -691,6 +691,26 @@ begin
       ResolveExprType(LNode.Children[1]); // new length expression
     end;
   end
+  else if LNode.Kind = nkGetMem then
+  begin
+    // getmem(ptr) — resolve pointer expression
+    if Length(LNode.Children) >= 1 then
+      ResolveExprType(LNode.Children[0]);
+  end
+  else if LNode.Kind = nkFreeMem then
+  begin
+    // freemem(ptr) — resolve pointer expression
+    if Length(LNode.Children) >= 1 then
+      ResolveExprType(LNode.Children[0]);
+  end
+  else if LNode.Kind = nkResizeMem then
+  begin
+    // resizemem(ptr, newsize) — resolve both args
+    if Length(LNode.Children) >= 1 then
+      ResolveExprType(LNode.Children[0]);
+    if Length(LNode.Children) >= 2 then
+      ResolveExprType(LNode.Children[1]);
+  end
   else
     // Expression statement (call, etc.)
     ResolveExprType(AIndex);

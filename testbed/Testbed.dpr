@@ -16,7 +16,7 @@ program Testbed;
 uses
   System.SysUtils,
   Ganymede.ABI in '..\src\Ganymede.ABI.pas',
-  Ganymede.API in '..\src\Ganymede.API.pas',
+  Ganymede.Core.API in '..\src\Ganymede.Core.API.pas',
   Ganymede.Builders in '..\src\Ganymede.Builders.pas',
   Ganymede.Codegen in '..\src\Ganymede.Codegen.pas',
   Ganymede.Config in '..\src\Ganymede.Config.pas',
@@ -27,7 +27,7 @@ uses
   Ganymede.Linker in '..\src\Ganymede.Linker.pas',
   Ganymede.Native in '..\src\Ganymede.Native.pas',
   Ganymede.Parser in '..\src\Ganymede.Parser.pas',
-  Ganymede in '..\src\Ganymede.pas',
+  Ganymede.Core in '..\src\Ganymede.Core.pas',
   Ganymede.Resources in '..\src\Ganymede.Resources.pas',
   Ganymede.Runtime in '..\src\Ganymede.Runtime.pas',
   Ganymede.Semantics in '..\src\Ganymede.Semantics.pas',

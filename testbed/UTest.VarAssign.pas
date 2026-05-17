@@ -30,7 +30,7 @@ uses
   System.SysUtils,
   Ganymede.Utils,
   Ganymede.Native,
-  Ganymede;
+  Ganymede.Core;
 
 const
   CVarAssignSource =

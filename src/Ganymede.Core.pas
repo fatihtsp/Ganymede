@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit Ganymede;
+unit Ganymede.Core;
 
 {$I Ganymede.Defines.inc}
 
@@ -50,6 +50,10 @@ type
 
   TGnyValueType = Ganymede.Types.TGnyValueType;
 
+  TGnyStatusCallback = Ganymede.Utils.TGnyStatusCallback;
+
+  TGnyLinkage = Ganymede.Types.TLinkage;
+
   { TGnyOptLevel }
   TGnyOptLevel = (
     olNone,    // No optimization
@@ -74,17 +78,17 @@ type
       10: (AsPointer: Pointer);
   end;
 
-  { TGnyHostImport — stored host function registration for replay on recompile }
-  TGnyHostImport = record
-    FuncName: string;
-    HostAddr: Pointer;
-    ParamTypes: TArray<TGnyValueType>;
-    ReturnType: TGnyValueType;
-    Linkage: TGnyLinkage;
-  end;
-
   { TGanymede }
   TGanymede = class(TGnyBaseObject)
+  private type
+    { TGnyHostImport — stored host function registration for replay on recompile }
+    TGnyHostImport = record
+      FuncName: string;
+      HostAddr: Pointer;
+      ParamTypes: TArray<TGnyValueType>;
+      ReturnType: TGnyValueType;
+      Linkage: TGnyLinkage;
+    end;
   private
     FLexer: TGnyScriptLexer;
     FParser: TGnyScriptParser;

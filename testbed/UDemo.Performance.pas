@@ -22,7 +22,7 @@ uses
   System.Diagnostics,
   Ganymede.Utils,
   Ganymede.Native,
-  Ganymede,
+  Ganymede.Core,
   UCommon;
 
 const

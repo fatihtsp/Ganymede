@@ -36,7 +36,8 @@ uses
   UTest.Overlays,
   UTest.RoutineTypes,
   UTest.VariadicArgs,
-  UTest.ConditionalComp;
+  UTest.ConditionalComp,
+  UTest.GetMem;
 
 procedure Menu();
 var
@@ -84,7 +85,9 @@ begin
       .Add('Variadic Arguments',
         procedure begin TGnyTestCase.Run(TScriptVariadicArgsTest) end)
       .Add('Conditional Compilation',
-        procedure begin TGnyTestCase.Run(TScriptConditionalCompTest) end);
+        procedure begin TGnyTestCase.Run(TScriptConditionalCompTest) end)
+      .Add('GetMem/FreeMem/ResizeMem',
+        procedure begin TGnyTestCase.Run(TScriptGetMemTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

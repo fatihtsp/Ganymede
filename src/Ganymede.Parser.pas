@@ -115,6 +115,9 @@ type
     function ParseSkipStatement(): Integer;
     function ParseWriteStatement(): Integer;
     function ParseSetLengthStatement(): Integer;
+    function ParseGetMemStatement(): Integer;
+    function ParseFreeMemStatement(): Integer;
+    function ParseResizeMemStatement(): Integer;
     function ParseVarBlock(const AParentNode: Integer): Integer;
     function ParseConstBlock(const AParentNode: Integer): Integer;
     function ParseTypeBlock(const AParentNode: Integer): Integer;
@@ -742,6 +745,12 @@ begin
     Result := ParseWriteStatement()
   else if PeekKind() = tkSetLength then
     Result := ParseSetLengthStatement()
+  else if PeekKind() = tkGetMem then
+    Result := ParseGetMemStatement()
+  else if PeekKind() = tkFreeMem then
+    Result := ParseFreeMemStatement()
+  else if PeekKind() = tkResizeMem then
+    Result := ParseResizeMemStatement()
   else
   begin
     // Expression — then check for assignment operator
@@ -1203,6 +1212,78 @@ begin
   Expect(tkComma);
 
   // Second argument: new length
+  LArgNode := ParseExpression(BP_NONE);
+  AddChild(Result, LArgNode);
+
+  Expect(tkRParen);
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
+// GetMem statement: getmem(ptr) ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseGetMemStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LArgNode: Integer;
+begin
+  LTok := Advance(); // consume 'getmem'
+  Result := AddNode(nkGetMem, LTok.Range);
+
+  Expect(tkLParen);
+
+  // Pointer variable
+  LArgNode := ParseExpression(BP_NONE);
+  AddChild(Result, LArgNode);
+
+  Expect(tkRParen);
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
+// FreeMem statement: freemem(ptr) ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseFreeMemStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LArgNode: Integer;
+begin
+  LTok := Advance(); // consume 'freemem'
+  Result := AddNode(nkFreeMem, LTok.Range);
+
+  Expect(tkLParen);
+
+  // Pointer variable
+  LArgNode := ParseExpression(BP_NONE);
+  AddChild(Result, LArgNode);
+
+  Expect(tkRParen);
+  Match(tkSemicolon);
+end;
+
+//------------------------------------------------------------------------------
+// ResizeMem statement: resizemem(ptr, newsize) ;
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseResizeMemStatement(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LArgNode: Integer;
+begin
+  LTok := Advance(); // consume 'resizemem'
+  Result := AddNode(nkResizeMem, LTok.Range);
+
+  Expect(tkLParen);
+
+  // First argument: pointer variable
+  LArgNode := ParseExpression(BP_NONE);
+  AddChild(Result, LArgNode);
+
+  Expect(tkComma);
+
+  // Second argument: new size in bytes
   LArgNode := ParseExpression(BP_NONE);
   AddChild(Result, LArgNode);
 

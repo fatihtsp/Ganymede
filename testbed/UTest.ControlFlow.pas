@@ -29,7 +29,7 @@ implementation
 uses
   System.SysUtils,
   Ganymede.Native,
-  Ganymede;
+  Ganymede.Core;
 
 const
   CControlFlowSource =

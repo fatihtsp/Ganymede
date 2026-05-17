@@ -1,0 +1,86 @@
+module mem test_mem_getmem;
+
+// ==========================================================================
+// Basic getmem/freemem — allocate int32, write, read, free
+// ==========================================================================
+
+public routine test_getmem_i32(): int32;
+var
+  p: pointer to int32;
+  result: int32;
+begin
+  getmem(p);
+  p^ := 42;
+  result := p^;
+  freemem(p);
+  return result;
+end;
+
+// ==========================================================================
+// getmem int64 — verify 8-byte allocation works
+// ==========================================================================
+
+public routine test_getmem_i64(): int64;
+var
+  p: pointer to int64;
+  result: int64;
+begin
+  getmem(p);
+  p^ := 1000000000;
+  result := p^;
+  freemem(p);
+  return result;
+end;
+
+// ==========================================================================
+// getmem float64 — verify float allocation works
+// ==========================================================================
+
+public routine test_getmem_f64(): float64;
+var
+  p: pointer to float64;
+  result: float64;
+begin
+  getmem(p);
+  p^ := 3.14;
+  result := p^;
+  freemem(p);
+  return result;
+end;
+
+// ==========================================================================
+// resizemem — allocate, resize, verify data survives
+// ==========================================================================
+
+public routine test_resizemem(): int32;
+var
+  p: pointer to int32;
+  result: int32;
+begin
+  getmem(p);
+  p^ := 99;
+  // Resize to hold 4 int32s (16 bytes)
+  resizemem(p, 16);
+  // Original value should survive realloc
+  result := p^;
+  freemem(p);
+  return result;
+end;
+
+// ==========================================================================
+// getmem uint8 — verify 1-byte allocation
+// ==========================================================================
+
+public routine test_getmem_u8(): uint8;
+var
+  p: pointer to uint8;
+  result: uint8;
+begin
+  getmem(p);
+  p^ := 255;
+  result := p^;
+  freemem(p);
+  return result;
+end;
+
+end.

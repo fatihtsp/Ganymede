@@ -63,6 +63,9 @@ type
     procedure EmitConstDecl(const AIndex: Integer);
     procedure EmitAssign(const AIndex: Integer);
     procedure EmitSetLength(const AIndex: Integer);
+    procedure EmitGetMem(const AIndex: Integer);
+    procedure EmitFreeMem(const AIndex: Integer);
+    procedure EmitResizeMem(const AIndex: Integer);
     procedure EmitInlineArrayType(const ATypeName: string);
     function  EmitExpr(const AIndex: Integer): TGnyExpr;
     procedure EmitAnonRecord(const AIndex: Integer);
@@ -740,6 +743,87 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// GetMem — getmem(ptr)
+// Allocates sizeof(pointee) bytes and assigns result to the pointer variable.
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitGetMem(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LPtrNode: TGnyScriptNode;
+  LVarName: string;
+  LPointeeType: string;
+  LElemVT: TGnyValueType;
+  LElemSize: Integer;
+begin
+  LNode := FNodes[AIndex];
+  LPtrNode := FNodes[LNode.Children[0]];
+  LVarName := LPtrNode.Text;
+
+  // Determine pointee size from the pointer's type annotation
+  LElemSize := 8; // default fallback (pointer-sized)
+  if FSemantics.FindPointeeType(LPtrNode.Extra, LPointeeType) then
+  begin
+    LElemVT := ResolveValueType(LPointeeType);
+    if LElemVT <> gvtVoid then
+    begin
+      if LElemVT in [gvtInt8, gvtUInt8] then
+        LElemSize := 1
+      else if LElemVT in [gvtInt16, gvtUInt16] then
+        LElemSize := 2
+      else if LElemVT in [gvtInt32, gvtUInt32, gvtFloat32] then
+        LElemSize := 4
+      else
+        LElemSize := 8;
+    end
+    else
+      LElemSize := FBackend.GetTypeSize(FBackend.TypeRef(LPointeeType));
+  end;
+
+  // p := Gny_GetMem(elemSize)
+  FBackend.Let(LVarName, FBackend.Invoke('Gny_GetMem',
+    [FBackend.Int64(LElemSize)]));
+end;
+
+//------------------------------------------------------------------------------
+// FreeMem — freemem(ptr)
+// Frees memory previously allocated by getmem.
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitFreeMem(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LPtrExpr: TGnyExpr;
+begin
+  LNode := FNodes[AIndex];
+  LPtrExpr := EmitExpr(LNode.Children[0]);
+  FBackend.Call('Gny_FreeMem', [LPtrExpr]);
+end;
+
+//------------------------------------------------------------------------------
+// ResizeMem — resizemem(ptr, newsize)
+// Reallocates the pointer's block to newsize bytes, updates the variable.
+//------------------------------------------------------------------------------
+
+procedure TGnyScriptEmitter.EmitResizeMem(const AIndex: Integer);
+var
+  LNode: TGnyScriptNode;
+  LPtrNode: TGnyScriptNode;
+  LVarName: string;
+  LNewSizeExpr: TGnyExpr;
+begin
+  LNode := FNodes[AIndex];
+  LPtrNode := FNodes[LNode.Children[0]];
+  LVarName := LPtrNode.Text;
+
+  LNewSizeExpr := EmitExpr(LNode.Children[1]);
+
+  // p := Gny_ReAllocMem(p, newsize)
+  FBackend.Let(LVarName, FBackend.Invoke('Gny_ReAllocMem',
+    [FBackend.Get(LVarName), LNewSizeExpr]));
+end;
+
+//------------------------------------------------------------------------------
 // Inline array type auto-definition
 // Parses type strings like "array[0..9] of int32" or "array of int32"
 // and defines them on the backend if not already defined.
@@ -913,6 +997,21 @@ begin
     // setlength(arr, newlen) → Gny_SetLength(AddrOf(arr), newlen, elemSize)
     if Length(LNode.Children) >= 2 then
       EmitSetLength(AIndex);
+  end
+  else if LNode.Kind = nkGetMem then
+  begin
+    if Length(LNode.Children) >= 1 then
+      EmitGetMem(AIndex);
+  end
+  else if LNode.Kind = nkFreeMem then
+  begin
+    if Length(LNode.Children) >= 1 then
+      EmitFreeMem(AIndex);
+  end
+  else if LNode.Kind = nkResizeMem then
+  begin
+    if Length(LNode.Children) >= 2 then
+      EmitResizeMem(AIndex);
   end
   else if LNode.Kind = nkBinary then
   begin

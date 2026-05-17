@@ -117,7 +117,7 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="..\src\Ganymede.ABI.pas"/>
-        <DCCReference Include="..\src\Ganymede.API.pas"/>
+        <DCCReference Include="..\src\Ganymede.Core.API.pas"/>
         <DCCReference Include="..\src\Ganymede.Builders.pas"/>
         <DCCReference Include="..\src\Ganymede.Codegen.pas"/>
         <DCCReference Include="..\src\Ganymede.Config.pas"/>
@@ -128,7 +128,7 @@
         <DCCReference Include="..\src\Ganymede.Linker.pas"/>
         <DCCReference Include="..\src\Ganymede.Native.pas"/>
         <DCCReference Include="..\src\Ganymede.Parser.pas"/>
-        <DCCReference Include="..\src\Ganymede.pas"/>
+        <DCCReference Include="..\src\Ganymede.Core.pas"/>
         <DCCReference Include="..\src\Ganymede.Resources.pas"/>
         <DCCReference Include="..\src\Ganymede.Runtime.pas"/>
         <DCCReference Include="..\src\Ganymede.Semantics.pas"/>

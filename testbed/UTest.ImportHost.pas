@@ -17,7 +17,7 @@ uses
   System.SysUtils,
   Ganymede.Utils,
   Ganymede.TestCase,
-  Ganymede,
+  Ganymede.Core,
   Ganymede.Native;
 
 type

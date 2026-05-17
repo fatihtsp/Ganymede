@@ -31,7 +31,7 @@ uses
   System.Math,
   Ganymede.Utils,
   Ganymede.Native,
-  Ganymede;
+  Ganymede.Core;
 
 const
   CNumericSource =

@@ -7,7 +7,7 @@
   See LICENSE for license information
 ===============================================================================}
 
-unit Ganymede.API;
+unit Ganymede.Core.API;
 
 {$I Ganymede.Defines.inc}
 
@@ -16,41 +16,41 @@ interface
 uses
   System.SysUtils,
   Ganymede.Utils,
-  Ganymede;
+  Ganymede.Core;
 
 type
   { TGnyAPI }
   TGnyAPI = class(TGnyBaseObject)
   private
+    FCore: TGanymede;
   public
     constructor Create(); override;
     destructor Destroy(); override;
-    procedure RegisterAll(const AScript: TGanymede);
   end;
 
 //------------------------------------------------------------------------------
 // Flat API wrappers — registered with the JIT via ImportHost
 //------------------------------------------------------------------------------
 
-var
-  GAPI: TGnyAPI;
 
 implementation
+
+var
+  GAPI: TGnyAPI;
 
 { TGnyAPI }
 
 constructor TGnyAPI.Create();
 begin
   inherited;
+  FCore := TGanymede.Create();
 end;
 
 destructor TGnyAPI.Destroy();
 begin
-  inherited;
-end;
+  FreeAndNil(FCore);
 
-procedure TGnyAPI.RegisterAll(const AScript: TGanymede);
-begin
+  inherited;
 end;
 
 initialization

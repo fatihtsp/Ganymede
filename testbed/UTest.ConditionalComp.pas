@@ -1,4 +1,4 @@
-{===============================================================================
+﻿{===============================================================================
   Ganymede™ - Embeddable Native Scripting Engine
 
   Copyright © 2026-present tinyBigGAMES™ LLC
@@ -18,7 +18,7 @@ uses
   System.IOUtils,
   Ganymede.Utils,
   Ganymede.TestCase,
-  Ganymede,
+  Ganymede.Core,
   Ganymede.Native,
   UCommon;
 

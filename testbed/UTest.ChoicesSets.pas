@@ -18,7 +18,7 @@ uses
   System.IOUtils,
   Ganymede.Utils,
   Ganymede.TestCase,
-  Ganymede,
+  Ganymede.Core,
   Ganymede.Native,
   UCommon;
 
