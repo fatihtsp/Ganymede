@@ -19,7 +19,8 @@ uses
   Ganymede.Utils,
   Ganymede.TestCase,
   Ganymede,
-  Ganymede.Native;
+  Ganymede.Native,
+  UCommon;
 
 type
   TScriptChoicesSetsTest = class(TGnyTestCase)
@@ -30,9 +31,6 @@ type
   end;
 
 implementation
-
-const
-  CTestDir = 'C:\Dev\Delphi\Projects\Ganymede\repo\bin\tests';
 
 { TScriptChoicesSetsTest }
 

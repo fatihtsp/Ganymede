@@ -1,4 +1,4 @@
-{===============================================================================
+﻿{===============================================================================
   Ganymede™ - Embeddable Native Scripting Engine
   Test: Overlay (Union) Types
 ===============================================================================}
@@ -15,7 +15,8 @@ uses
   Ganymede.Utils,
   Ganymede.TestCase,
   Ganymede,
-  Ganymede.Native;
+  Ganymede.Native,
+  UCommon;
 
 type
   TScriptOverlaysTest = class(TGnyTestCase)
@@ -26,8 +27,6 @@ type
   end;
 implementation
 
-const
-  CTestDir = 'C:\Dev\Delphi\Projects\Ganymede\repo\bin\tests';
 
 { TScriptOverlaysTest }
 

@@ -19,7 +19,8 @@ uses
   Ganymede.Utils,
   Ganymede.TestCase,
   Ganymede,
-  Ganymede.Native;
+  Ganymede.Native,
+  UCommon;
 
 type
   TScriptMatchStmtTest = class(TGnyTestCase)
@@ -31,8 +32,6 @@ type
 
 implementation
 
-const
-  CTestDir = 'C:\Dev\Delphi\Projects\Ganymede\repo\bin\tests';
 
 { TScriptMatchStmtTest }
 

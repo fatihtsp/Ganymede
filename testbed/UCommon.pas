@@ -15,10 +15,14 @@ interface
 
 procedure PrintBenchmarkReference();
 
+const
+  CTestDir = 'tests';
+
 implementation
 
 uses
   Ganymede.Utils;
+
 
 procedure PrintBenchmarkReference();
 begin

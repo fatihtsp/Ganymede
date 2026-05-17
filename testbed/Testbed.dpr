@@ -53,7 +53,8 @@ uses
   UTest.StringIO in 'UTest.StringIO.pas',
   UTest.VarAssign in 'UTest.VarAssign.pas',
   UTestbed in 'UTestbed.pas',
-  UTest.Overlays in 'UTest.Overlays.pas';
+  UTest.Overlays in 'UTest.Overlays.pas',
+  UTest.RoutineTypes in 'UTest.RoutineTypes.pas';
 
 begin
   RunTestbed();

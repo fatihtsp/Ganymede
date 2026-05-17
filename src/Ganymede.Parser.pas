@@ -40,8 +40,8 @@ type
     // Statements
     nkBlock, nkAssign, nkCall,
     nkIf, nkWhile, nkFor, nkRepeat, nkMatch, nkMatchArm,
-    nkReturn, nkLeave, nkSkip, nkGuard,
-    nkRaise, nkCreate, nkDestroy,
+    nkReturn, nkLeave, nkSkip,
+    nkCreate, nkDestroy,
     nkGetMem, nkFreeMem, nkResizeMem, nkSetLength,
     nkWrite, nkWriteLn,
 
@@ -631,6 +631,35 @@ begin
     end
     else
       Result := 'set';
+  end
+  // Routine type: routine [ "C" ] ( [paramTypes] ) [ : returnType ]
+  else if LTok.Kind = tkRoutine then
+  begin
+    Advance(); // consume 'routine'
+    Result := 'routine';
+
+    // Optional linkage spec: "C"
+    if PeekKind() = tkStringLit then
+      Result := Result + ' ' + Advance().Text;
+
+    Expect(tkLParen);
+
+    // Parse comma-separated parameter types (just types, no names)
+    if PeekKind() <> tkRParen then
+    begin
+      Result := Result + '(' + ParseTypeExpr();
+      while Match(tkComma) do
+        Result := Result + ',' + ParseTypeExpr();
+      Result := Result + ')';
+    end
+    else
+      Result := Result + '()';
+
+    Expect(tkRParen);
+
+    // Optional return type
+    if Match(tkColon) then
+      Result := Result + ':' + ParseTypeExpr();
   end
   else
   begin
@@ -1341,6 +1370,13 @@ begin
       LTypeDefNode := ParseOverlayType();
       if LTypeDefNode >= 0 then
         AddChild(LTypeDeclNode, LTypeDefNode);
+    end
+    // Routine type: routine [ "C" ] ( [paramTypes] ) [ : returnType ]
+    else if PeekKind() = tkRoutine then
+    begin
+      LNode := FNodes[LTypeDeclNode];
+      LNode.Extra := ParseTypeExpr();
+      FNodes[LTypeDeclNode] := LNode;
     end
     else
     begin

@@ -19,7 +19,8 @@ uses
   Ganymede.Utils,
   Ganymede.TestCase,
   Ganymede,
-  Ganymede.Native;
+  Ganymede.Native,
+  UCommon;
 
 type
   { TScriptImportClauseTest }
@@ -32,8 +33,6 @@ type
 
 implementation
 
-const
-  CTestDir = 'C:\Dev\Delphi\Projects\Ganymede\repo\bin\tests';
 
 { TScriptImportClauseTest }
 

@@ -1,0 +1,139 @@
+module mem test_mem_exceptions;
+
+// ==========================================================================
+// Test 1: Guard/except — basic exception catch
+// Raises an exception and catches it. Returns 1 if caught, 0 if not.
+// ==========================================================================
+public routine test_guard_except(): int32;
+var
+  caught: int32;
+begin
+  caught := 0;
+  guard
+    raiseexception("test error");
+  except
+    caught := 1;
+  end;
+  return caught;
+end;
+
+// ==========================================================================
+// Test 2: Guard/finally — cleanup always runs
+// Finally block sets the flag regardless of exception.
+// ==========================================================================
+public routine test_guard_finally(): int32;
+var
+  cleaned: int32;
+begin
+  cleaned := 0;
+  guard
+    cleaned := 1;
+  finally
+    cleaned := cleaned + 10;
+  end;
+  return cleaned;
+end;
+
+// ==========================================================================
+// Test 3: Guard/except/finally — all three blocks
+// Exception caught, finally runs after except.
+// ==========================================================================
+public routine test_guard_except_finally(): int32;
+var
+  result_val: int32;
+begin
+  result_val := 0;
+  guard
+    raiseexception("boom");
+  except
+    result_val := 1;
+  finally
+    result_val := result_val + 100;
+  end;
+  return result_val;
+end;
+
+// ==========================================================================
+// Test 4: getexceptioncode — default code is 1
+// ==========================================================================
+public routine test_exception_code(): int32;
+var
+  code: int32;
+begin
+  code := 0;
+  guard
+    raiseexception("with code");
+  except
+    code := getexceptioncode();
+  end;
+  return code;
+end;
+
+// ==========================================================================
+// Test 5: raiseexceptioncode — custom code
+// ==========================================================================
+public routine test_exception_custom_code(): int32;
+var
+  code: int32;
+begin
+  code := 0;
+  guard
+    raiseexceptioncode(42, "custom");
+  except
+    code := getexceptioncode();
+  end;
+  return code;
+end;
+
+// ==========================================================================
+// Test 6: No exception — guard body runs, except does NOT run
+// ==========================================================================
+public routine test_no_exception(): int32;
+var
+  val: int32;
+begin
+  val := 0;
+  guard
+    val := 10;
+  except
+    val := 99;
+  end;
+  return val;
+end;
+
+// ==========================================================================
+// Test 7: Finally runs even without exception
+// ==========================================================================
+public routine test_finally_no_exception(): int32;
+var
+  val: int32;
+begin
+  val := 0;
+  guard
+    val := 5;
+  finally
+    val := val + 50;
+  end;
+  return val;
+end;
+
+// ==========================================================================
+// Test 8: Finally runs even WITH exception (except+finally)
+// ==========================================================================
+public routine test_finally_with_exception(): int32;
+var
+  val: int32;
+begin
+  val := 0;
+  guard
+    raiseexception("error");
+    val := 999;
+  except
+    val := 1;
+  finally
+    val := val + 100;
+  end;
+  return val;
+end;
+
+end.

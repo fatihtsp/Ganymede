@@ -51,11 +51,6 @@ type
     // Keywords — Self / Parent
     tkSelf, tkParent,
 
-    // Keywords — Exception handling
-    tkGuard, tkExcept, tkFinally,
-    tkRaiseException, tkRaiseExceptionCode,
-    tkGetExceptionCode, tkGetExceptionMessage,
-
     // Keywords — Memory management
     tkCreate, tkDestroy,
     tkGetMem, tkFreeMem, tkResizeMem, tkSetLength,
@@ -311,15 +306,6 @@ begin
   // Self / Parent
   FKeywords.Add('self', tkSelf);
   FKeywords.Add('parent', tkParent);
-
-  // Exception handling
-  FKeywords.Add('guard', tkGuard);
-  FKeywords.Add('except', tkExcept);
-  FKeywords.Add('finally', tkFinally);
-  FKeywords.Add('raiseexception', tkRaiseException);
-  FKeywords.Add('raiseexceptioncode', tkRaiseExceptionCode);
-  FKeywords.Add('getexceptioncode', tkGetExceptionCode);
-  FKeywords.Add('getexceptionmessage', tkGetExceptionMessage);
 
   // Memory management
   FKeywords.Add('create', tkCreate);

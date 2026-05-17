@@ -279,6 +279,7 @@ begin
         EmitInlineArrayType(LChild.Extra);
         FBackend.Global(LChild.Text, LChild.Extra);
       end
+      // Named types (records, routine types, etc.) use string overload
       else if ResolveValueType(LChild.Extra) = gvtVoid then
         FBackend.Global(LChild.Text, LChild.Extra)
       else
@@ -326,7 +327,13 @@ begin
   begin
     LChild := FNodes[LNode.Children[LI]];
     if LChild.Kind = nkParamDecl then
-      FBackend.Arg(LChild.Text, ResolveValueType(LChild.Extra));
+    begin
+      if ResolveValueType(LChild.Extra) <> gvtVoid then
+        FBackend.Arg(LChild.Text, ResolveValueType(LChild.Extra))
+      else
+        // Named types (routine, record, etc.) — pointer-sized at ABI level
+        FBackend.Arg(LChild.Text, gvtPointer);
+    end;
   end;
 
   // Emit type declarations first (records must be defined before use)
@@ -376,9 +383,66 @@ var
   LI: Integer;
   LChoicesValues: TArray<TGnyScriptChoicesValueInfo>;
   LSetInfo: TGnyScriptSetTypeInfo;
+  LRoutineStr: string;
+  LRoutineLinkage: TGnyLinkage;
+  LParenStart: Integer;
+  LParenEnd: Integer;
+  LParamStr: string;
+  LRetStr: string;
+  LParams: TArray<string>;
 begin
   LNode := FNodes[AIndex];
   LTypeName := LNode.Text;
+
+  // Routine type — stored as string in Extra, no child nodes
+  if (Length(LNode.Children) = 0) and LNode.Extra.StartsWith('routine') then
+  begin
+    LRoutineStr := LNode.Extra;
+
+    // Parse optional linkage: routine "C" (...) → plC
+    LRoutineLinkage := plDefault;
+    if LRoutineStr.Contains('"C"') then
+      LRoutineLinkage := plC;
+
+    // Parse parameter types from between ( and )
+    LParenStart := Pos('(', LRoutineStr);
+    LParenEnd := LRoutineStr.LastIndexOf(')') + 1; // 1-based
+    LParamStr := '';
+    if (LParenStart > 0) and (LParenEnd > LParenStart) then
+      LParamStr := Copy(LRoutineStr, LParenStart + 1, LParenEnd - LParenStart - 1);
+
+    // Parse return type: everything after last ')' and ':'
+    LRetStr := '';
+    if (LParenEnd > 0) and (LParenEnd < Length(LRoutineStr)) and
+       (LRoutineStr[LParenEnd + 1] = ':') then
+      LRetStr := Copy(LRoutineStr, LParenEnd + 2, MaxInt);
+
+    // Emit: DefineRoutine → RoutineParam* → RoutineReturns → EndRoutine
+    FBackend.DefineRoutine(LTypeName, LRoutineLinkage);
+
+    if LParamStr <> '' then
+    begin
+      LParams := LParamStr.Split([',']);
+      for LI := 0 to Length(LParams) - 1 do
+      begin
+        if ResolveValueType(LParams[LI]) <> gvtVoid then
+          FBackend.RoutineParam(ResolveValueType(LParams[LI]))
+        else
+          FBackend.RoutineParam(LParams[LI]);
+      end;
+    end;
+
+    if LRetStr <> '' then
+    begin
+      if ResolveValueType(LRetStr) <> gvtVoid then
+        FBackend.RoutineReturns(ResolveValueType(LRetStr))
+      else
+        FBackend.RoutineReturns(LRetStr);
+    end;
+
+    FBackend.EndRoutine();
+    Exit;
+  end;
 
   if Length(LNode.Children) = 0 then
     Exit;
@@ -722,6 +786,7 @@ var
   LCallee: TGnyScriptNode;
   LFuncName: string;
   LArgs: array of TGnyExpr;
+  LLeft: TGnyExpr;
   LParamTypes: TArray<TGnyValueType>;
   LI: Integer;
 begin
@@ -756,34 +821,68 @@ begin
     begin
       LCallee := FNodes[LNode.Children[0]];
 
-      // Resolve function name: direct ident or module.func field access
-      LFuncName := '';
-      if LCallee.Kind = nkIdent then
-        LFuncName := LCallee.Text
-      else if (LCallee.Kind = nkFieldAccess) then
-        LFuncName := LCallee.Text; // bare function name from field access
-
-      if LFuncName <> '' then
+      // Indirect call: semantics marked Text='indirect' for routine-typed variables
+      if LNode.Text = 'indirect' then
       begin
         SetLength(LArgs, Length(LNode.Children) - 1);
         for LI := 1 to Length(LNode.Children) - 1 do
           LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
 
-        // Int→float argument coercion: only wrap integer LITERALS with IntToFloat64
-        // when the import parameter expects float32/float64.
-        LParamTypes := FBackend.GetImportParamTypes(LFuncName);
-        for LI := 0 to High(LArgs) do
-        begin
-          if (LI < Length(LParamTypes)) and
-             (LParamTypes[LI] in [gvtFloat32, gvtFloat64]) and
-             (FNodes[LNode.Children[LI + 1]].Kind = nkIntLit) then
-            LArgs[LI] := FBackend.IntToFloat64(LArgs[LI]);
-        end;
-
+        // Emit callee expression and call indirectly
+        LLeft := EmitExpr(LNode.Children[0]);
         if Length(LArgs) > 0 then
-          FBackend.Call(LFuncName, LArgs)
+          FBackend.CallIndirect(LLeft, LArgs)
         else
-          FBackend.Call(LFuncName);
+          FBackend.CallIndirect(LLeft);
+      end
+      // Expression-based callee (array index, deref, etc.) — indirect via temp
+      else if (LCallee.Kind <> nkIdent) and (LCallee.Kind <> nkFieldAccess) then
+      begin
+        SetLength(LArgs, Length(LNode.Children) - 1);
+        for LI := 1 to Length(LNode.Children) - 1 do
+          LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
+
+        // Materialize callee into a temp — deref to load the value from the address
+        FBackend.VarDecl(Format('__fp%d', [FTempIndex]), gvtPointer);
+        FBackend.Let(Format('__fp%d', [FTempIndex]),
+          FBackend.Deref(EmitExpr(LNode.Children[0]), gvtPointer));
+        if Length(LArgs) > 0 then
+          FBackend.CallIndirect(FBackend.Get(Format('__fp%d', [FTempIndex])), LArgs)
+        else
+          FBackend.CallIndirect(FBackend.Get(Format('__fp%d', [FTempIndex])));
+        Inc(FTempIndex);
+      end
+      else
+      begin
+        // Direct call: resolve function name
+        LFuncName := '';
+        if LCallee.Kind = nkIdent then
+          LFuncName := LCallee.Text
+        else if (LCallee.Kind = nkFieldAccess) then
+          LFuncName := LCallee.Text; // bare function name from field access
+
+        if LFuncName <> '' then
+        begin
+          SetLength(LArgs, Length(LNode.Children) - 1);
+          for LI := 1 to Length(LNode.Children) - 1 do
+            LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
+
+          // Int→float argument coercion: only wrap integer LITERALS with IntToFloat64
+          // when the import parameter expects float32/float64.
+          LParamTypes := FBackend.GetImportParamTypes(LFuncName);
+          for LI := 0 to High(LArgs) do
+          begin
+            if (LI < Length(LParamTypes)) and
+               (LParamTypes[LI] in [gvtFloat32, gvtFloat64]) and
+               (FNodes[LNode.Children[LI + 1]].Kind = nkIntLit) then
+              LArgs[LI] := FBackend.IntToFloat64(LArgs[LI]);
+          end;
+
+          if Length(LArgs) > 0 then
+            FBackend.Call(LFuncName, LArgs)
+          else
+            FBackend.Call(LFuncName);
+        end;
       end;
     end;
   end
@@ -1868,22 +1967,51 @@ begin
     begin
       LCallee := FNodes[LNode.Children[0]];
 
-      // Resolve function name: direct ident or module.func field access
-      LFuncName := '';
-      if LCallee.Kind = nkIdent then
-        LFuncName := LCallee.Text
-      else if LCallee.Kind = nkFieldAccess then
-        LFuncName := LCallee.Text; // bare function name
-
-      if LFuncName <> '' then
+      // Indirect call: semantics marked Text='indirect' for routine-typed variables
+      if LNode.Text = 'indirect' then
       begin
         // Build argument array
         SetLength(LArgs, Length(LNode.Children) - 1);
         for LI := 1 to Length(LNode.Children) - 1 do
           LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
 
-        // Emit as Invoke (returns a value)
-        Result := FBackend.Invoke(LFuncName, LArgs);
+        // Emit callee expression (function pointer) and invoke indirectly
+        LLeft := EmitExpr(LNode.Children[0]);
+        Result := FBackend.InvokeIndirect(LLeft, LArgs);
+      end
+      // Expression-based callee (array index, deref, etc.) — indirect via temp
+      else if (LCallee.Kind <> nkIdent) and (LCallee.Kind <> nkFieldAccess) then
+      begin
+        SetLength(LArgs, Length(LNode.Children) - 1);
+        for LI := 1 to Length(LNode.Children) - 1 do
+          LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
+
+        // Materialize callee into a temp — deref to load the value from the address
+        LTempName := Format('__fp%d', [FTempIndex]);
+        Inc(FTempIndex);
+        FBackend.VarDecl(LTempName, gvtPointer);
+        FBackend.Let(LTempName, FBackend.Deref(EmitExpr(LNode.Children[0]), gvtPointer));
+        Result := FBackend.InvokeIndirect(FBackend.Get(LTempName), LArgs);
+      end
+      else
+      begin
+        // Direct call: resolve function name
+        LFuncName := '';
+        if LCallee.Kind = nkIdent then
+          LFuncName := LCallee.Text
+        else if LCallee.Kind = nkFieldAccess then
+          LFuncName := LCallee.Text; // bare function name
+
+        if LFuncName <> '' then
+        begin
+          // Build argument array
+          SetLength(LArgs, Length(LNode.Children) - 1);
+          for LI := 1 to Length(LNode.Children) - 1 do
+            LArgs[LI - 1] := EmitExpr(LNode.Children[LI]);
+
+          // Emit as Invoke (returns a value)
+          Result := FBackend.Invoke(LFuncName, LArgs);
+        end;
       end;
     end;
   end
@@ -1963,8 +2091,12 @@ begin
   begin
     if Length(LNode.Children) > 0 then
     begin
-      // If child is a simple identifier, use AddrOf(name)
-      if FNodes[LNode.Children[0]].Kind = nkIdent then
+      // Function address: semantics marked Text='func' for routine targets
+      if (LNode.Text = 'func') and
+         (FNodes[LNode.Children[0]].Kind = nkIdent) then
+        Result := FBackend.FuncAddr(FNodes[LNode.Children[0]].Text)
+      // Variable address: simple identifier → AddrOf(name)
+      else if FNodes[LNode.Children[0]].Kind = nkIdent then
         Result := FBackend.AddrOf(FNodes[LNode.Children[0]].Text)
       else
         // For complex expressions, use AddrOfVal

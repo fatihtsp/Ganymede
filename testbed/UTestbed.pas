@@ -33,7 +33,8 @@ uses
   UTest.Pointers,
   UTest.Arrays,
   UTest.ChoicesSets,
-  UTest.Overlays;
+  UTest.Overlays,
+  UTest.RoutineTypes;
 
 procedure Menu();
 var
@@ -75,7 +76,9 @@ begin
       .Add('Choices & Sets',
         procedure begin TGnyTestCase.Run(TScriptChoicesSetsTest) end)
       .Add('Overlay Types',
-        procedure begin TGnyTestCase.Run(TScriptOverlaysTest) end);
+        procedure begin TGnyTestCase.Run(TScriptOverlaysTest) end)
+      .Add('Routine Types',
+        procedure begin TGnyTestCase.Run(TScriptRoutineTypesTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

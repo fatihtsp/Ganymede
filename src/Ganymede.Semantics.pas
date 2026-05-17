@@ -97,6 +97,7 @@ type
     FChoicesTypes: TDictionary<string, TArray<TGnyScriptChoicesValueInfo>>;
     FSetTypes: TDictionary<string, TGnyScriptSetTypeInfo>;
     FOverlayTypes: TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>;
+    FRoutineTypes: TDictionary<string, string>; // type name → routine type string
     FLoopDepth: Integer;
 
     // Scope management
@@ -172,6 +173,10 @@ type
     // Overlay (union) type lookup (for emitter)
     function IsOverlayType(const ATypeName: string): Boolean;
     function GetOverlayFields(const ATypeName: string): TArray<TGnyScriptRecordFieldInfo>;
+
+    // Routine type lookup (for emitter)
+    function IsRoutineType(const ATypeName: string): Boolean;
+    function GetRoutineTypeString(const ATypeName: string): string;
   end;
 
 const
@@ -251,6 +256,7 @@ begin
     FChoicesTypes := TDictionary<string, TArray<TGnyScriptChoicesValueInfo>>.Create();
     FSetTypes := TDictionary<string, TGnyScriptSetTypeInfo>.Create();
     FOverlayTypes := TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>.Create();
+    FRoutineTypes := TDictionary<string, string>.Create();
   except
     on E: Exception do
     begin
@@ -262,6 +268,7 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FRoutineTypes.Free();
   FOverlayTypes.Free();
   FSetTypes.Free();
   FChoicesTypes.Free();
@@ -776,6 +783,10 @@ begin
     FSetTypes.AddOrSetValue(LTypeName, LInlineSetInfo);
   end;
 
+  // Auto-register inline routine types (e.g., "routine(int32,int32):int32")
+  if LTypeName.StartsWith('routine') and (not FRoutineTypes.ContainsKey(LTypeName)) then
+    FRoutineTypes.AddOrSetValue(LTypeName, LTypeName);
+
   // Analyze initializer expression if present
   if Length(LNode.Children) > 0 then
     ResolveExprType(LNode.Children[0]);
@@ -908,7 +919,6 @@ begin
      (FNodes[LNode.Children[0]].Kind = nkChoicesType) then
   begin
     LRecNode := FNodes[LNode.Children[0]];
-    LFieldCount := 0;
     SetLength(LFields, Length(LRecNode.Children)); // reuse LFields length var
 
     SetLength(LChoicesValues, Length(LRecNode.Children));
@@ -999,6 +1009,12 @@ begin
     SetLength(LFields, LFieldCount);
 
     FOverlayTypes.AddOrSetValue(LNode.Text, LFields);
+  end
+
+  // If Extra starts with 'routine', register as routine type (no child node)
+  else if LNode.Extra.StartsWith('routine') then
+  begin
+    FRoutineTypes.AddOrSetValue(LNode.Text, LNode.Extra);
   end;
 end;
 
@@ -1219,9 +1235,36 @@ begin
         if FindSymbol(LKeys[0], LSym) then
           Result := LSym.ReturnType;
       end
+      // Indirect call: callee is a variable/param with a routine type
+      else if (LNode.Kind = nkIdent) and
+              FindSymbol(LNode.Text, LSym) and
+              (LSym.Kind in [skVariable, skParam]) and
+              (IsRoutineType(LSym.TypeName) or LSym.TypeName.StartsWith('routine')) then
+      begin
+        // Mark the nkFuncCall node as indirect for the emitter
+        LNode := FNodes[AIndex];
+        LNode.Text := 'indirect';
+        FNodes[AIndex] := LNode;
+
+        // Resolve return type from routine type string
+        LLeftType := '';
+        if FRoutineTypes.TryGetValue(LSym.TypeName, LLeftType) then
+        begin
+          // Parse return type: everything after last ')' and ':'
+          LI := LLeftType.LastIndexOf(')');
+          if (LI >= 0) and (LI + 1 < LLeftType.Length) and (LLeftType.Chars[LI + 1] = ':') then
+            Result := LLeftType.Substring(LI + 2)
+          else
+            Result := '';
+        end;
+      end
       else if LNode.Kind = nkIdent then
         FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
           RSScriptUndeclaredIdent, [LNode.Text]);
+
+      // Resolve all argument expressions (sets semantic markers like 'func')
+      for LI := 1 to Length(FNodes[AIndex].Children) - 1 do
+        ResolveExprType(FNodes[AIndex].Children[LI]);
     end;
   end
 
@@ -1238,14 +1281,28 @@ begin
 
   else if LNode.Kind = nkAddressOf then
   begin
-    // address of expr — result is pointer to the child's type
     if Length(LNode.Children) > 0 then
     begin
-      LLeftType := ResolveExprType(LNode.Children[0]);
-      if LLeftType <> '' then
-        Result := 'pointer to ' + LLeftType
-      else
+      // Check if child is an identifier resolving to a routine (function address)
+      // Routines are registered with signature keys like "add(int32,int32)",
+      // so use prefix matching to find them by bare name.
+      if (FNodes[LNode.Children[0]].Kind = nkIdent) and
+         FindSymbolsWithPrefix(FNodes[LNode.Children[0]].Text + '(', LKeys) then
+      begin
+        // Mark this node as a function address for the emitter
+        LNode.Text := 'func';
+        FNodes[AIndex] := LNode;
         Result := 'pointer';
+      end
+      else
+      begin
+        // Variable address — result is pointer to the child's type
+        LLeftType := ResolveExprType(LNode.Children[0]);
+        if LLeftType <> '' then
+          Result := 'pointer to ' + LLeftType
+        else
+          Result := 'pointer';
+      end;
     end;
   end
 
@@ -1420,6 +1477,28 @@ function TGnyScriptSemantics.GetOverlayFields(
 begin
   if not FOverlayTypes.TryGetValue(ATypeName, Result) then
     Result := nil;
+end;
+
+//------------------------------------------------------------------------------
+// Routine type lookup (for emitter)
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.IsRoutineType(const ATypeName: string): Boolean;
+begin
+  Result := FRoutineTypes.ContainsKey(ATypeName) or
+            ATypeName.StartsWith('routine');
+end;
+
+function TGnyScriptSemantics.GetRoutineTypeString(
+  const ATypeName: string): string;
+begin
+  if not FRoutineTypes.TryGetValue(ATypeName, Result) then
+  begin
+    if ATypeName.StartsWith('routine') then
+      Result := ATypeName
+    else
+      Result := '';
+  end;
 end;
 
 end.

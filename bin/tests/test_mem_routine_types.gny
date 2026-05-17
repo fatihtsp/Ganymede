@@ -1,0 +1,204 @@
+module mem test_mem_routine_types;
+
+// =====================================================================
+// Routine type definitions
+// =====================================================================
+
+type
+  TBinOp = routine(int32, int32): int32;
+  TNullary = routine(): int32;
+
+routine add(a: int32; b: int32): int32;
+begin
+  return a + b;
+end;
+
+routine sub(a: int32; b: int32): int32;
+begin
+  return a - b;
+end;
+
+routine mul(a: int32; b: int32): int32;
+begin
+  return a * b;
+end;
+
+routine seven(): int32;
+begin
+  return 7;
+end;
+
+routine forty_two(): int32;
+begin
+  return 42;
+end;
+
+// =====================================================================
+// Test 1: basic assign + call
+// =====================================================================
+public routine test_basic(): int32;
+var
+  op: TBinOp;
+begin
+  op := address of add;
+  return op(3, 4);
+end;
+
+// =====================================================================
+// Test 2: reassign to different function
+// =====================================================================
+public routine test_reassign(): int32;
+var
+  op: TBinOp;
+  r1: int32;
+  r2: int32;
+begin
+  op := address of add;
+  r1 := op(10, 5);
+  op := address of sub;
+  r2 := op(10, 5);
+  return r1 + r2;
+end;
+
+// =====================================================================
+// Test 3: pass funcptr as parameter (callback)
+// =====================================================================
+routine apply(f: TBinOp; x: int32; y: int32): int32;
+begin
+  return f(x, y);
+end;
+
+public routine test_callback(): int32;
+begin
+  return apply(address of add, 6, 7);
+end;
+
+// =====================================================================
+// Test 4: void indirect call (side effect via global)
+// =====================================================================
+var
+  g_accum: int32;
+
+routine accumulate(a: int32; b: int32): int32;
+begin
+  g_accum := a + b;
+  return 0;
+end;
+
+public routine test_void_indirect(): int32;
+var
+  op: TBinOp;
+begin
+  g_accum := 0;
+  op := address of accumulate;
+  op(100, 23);
+  return g_accum;
+end;
+
+// =====================================================================
+// Test 5: nullary routine type (no params)
+// =====================================================================
+public routine test_nullary(): int32;
+var
+  f: TNullary;
+begin
+  f := address of seven;
+  return f();
+end;
+
+// =====================================================================
+// Test 6: reassign nullary
+// =====================================================================
+public routine test_nullary_reassign(): int32;
+var
+  f: TNullary;
+  r1: int32;
+  r2: int32;
+begin
+  f := address of seven;
+  r1 := f();
+  f := address of forty_two;
+  r2 := f();
+  return r1 + r2;
+end;
+
+// =====================================================================
+// Test 7: funcptr in static array
+// =====================================================================
+public routine test_array(): int32;
+var
+  ops: array[0..2] of TBinOp;
+begin
+  ops[0] := address of add;
+  ops[1] := address of sub;
+  ops[2] := address of mul;
+  return ops[0](10, 3) + ops[1](10, 3) + ops[2](10, 3);
+end;
+
+// =====================================================================
+// Test 8: global funcptr variable
+// =====================================================================
+var
+  g_op: TBinOp;
+
+public routine test_global(): int32;
+begin
+  g_op := address of mul;
+  return g_op(6, 7);
+end;
+
+// =====================================================================
+// Test 9: chain — result of indirect call as arg to another
+// =====================================================================
+public routine test_chain(): int32;
+var
+  op: TBinOp;
+begin
+  op := address of add;
+  return op(op(1, 2), op(3, 4));
+end;
+
+// =====================================================================
+// Test 10: multiple callback params
+// =====================================================================
+routine combine(f: TBinOp; g: TBinOp; x: int32; y: int32): int32;
+begin
+  return f(x, y) + g(x, y);
+end;
+
+public routine test_multi_callback(): int32;
+begin
+  return combine(address of add, address of mul, 3, 4);
+end;
+
+// =====================================================================
+// Test 11: indirect call in loop
+// =====================================================================
+public routine test_loop(): int32;
+var
+  op: TBinOp;
+  total: int32;
+  i: int32;
+begin
+  op := address of add;
+  total := 0;
+  for i := 1 to 5 do
+    total := op(total, i);
+  end;
+  return total;
+end;
+
+// =====================================================================
+// Test 12: pass different funcptrs to same callback
+// =====================================================================
+public routine test_swap_callback(): int32;
+var
+  r1: int32;
+  r2: int32;
+begin
+  r1 := apply(address of add, 10, 5);
+  r2 := apply(address of sub, 10, 5);
+  return r1 + r2;
+end;
+
+end.
