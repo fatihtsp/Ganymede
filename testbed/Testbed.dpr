@@ -54,7 +54,8 @@ uses
   UTest.VarAssign in 'UTest.VarAssign.pas',
   UTestbed in 'UTestbed.pas',
   UTest.Overlays in 'UTest.Overlays.pas',
-  UTest.RoutineTypes in 'UTest.RoutineTypes.pas';
+  UTest.RoutineTypes in 'UTest.RoutineTypes.pas',
+  UTest.VariadicArgs in 'UTest.VariadicArgs.pas';
 
 begin
   RunTestbed();

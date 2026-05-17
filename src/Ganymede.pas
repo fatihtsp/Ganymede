@@ -769,6 +769,15 @@ function TGanymede.Invoke(const AName: string;
 var
   LInt: Int64;
   LFloat: Double;
+  LIR: TIR;
+  LFunc: TIR.TIRFunc;
+  LI: Integer;
+  LJ: Integer;
+  LFixedParams: Integer;
+  LVaCount: Integer;
+  LRawArgs: TArray<Int64>;
+  LConvertedArgs: TArray<Int64>;
+  LIsVariadic: Boolean;
 begin
   Result := Default(TGnyValue);
   Result.ValueType := AReturn;
@@ -776,30 +785,113 @@ begin
   if FJIT = nil then
     Exit;
 
-  case AReturn of
-    gvtFloat32:
+  // Check if target function is variadic — if so, prepend hidden count arg
+  LIsVariadic := False;
+  LIR := FBackend.GetIR();
+  for LI := 0 to LIR.GetFunctionCount() - 1 do
+  begin
+    LFunc := LIR.GetFunction(LI);
+    if SameText(LFunc.FuncName, AName) and LFunc.IsVariadic then
     begin
-      LFloat := FJIT.InvokeFloat(AName, AArgs);
-      Result.AsFloat32 := Single(LFloat);
+      LIsVariadic := True;
+
+      // Count declared (fixed) params
+      LFixedParams := 0;
+      if LFunc.Vars <> nil then
+      begin
+        for LJ := 0 to LFunc.Vars.Count - 1 do
+        begin
+          if LFunc.Vars[LJ].IsParam then
+            Inc(LFixedParams);
+        end;
+      end;
+
+      // Calculate variadic arg count
+      LVaCount := Length(AArgs) - LFixedParams;
+      if LVaCount < 0 then
+        LVaCount := 0;
+
+      // Convert original args to Int64
+      SetLength(LConvertedArgs, Length(AArgs));
+      for LJ := 0 to High(AArgs) do
+      begin
+        case AArgs[LJ].VType of
+          vtInteger:  LConvertedArgs[LJ] := AArgs[LJ].VInteger;
+          vtInt64:    LConvertedArgs[LJ] := AArgs[LJ].VInt64^;
+          vtBoolean:  LConvertedArgs[LJ] := Ord(AArgs[LJ].VBoolean);
+          vtExtended:
+          begin
+            LFloat := AArgs[LJ].VExtended^;
+            LConvertedArgs[LJ] := PInt64(@LFloat)^;
+          end;
+          vtPointer:  LConvertedArgs[LJ] := Int64(AArgs[LJ].VPointer);
+        else
+          LConvertedArgs[LJ] := 0;
+        end;
+      end;
+
+      // Prepend hidden count as first arg
+      SetLength(LRawArgs, Length(LConvertedArgs) + 1);
+      LRawArgs[0] := LVaCount;
+      for LJ := 0 to High(LConvertedArgs) do
+        LRawArgs[LJ + 1] := LConvertedArgs[LJ];
+
+      Break;
     end;
+  end;
 
-    gvtFloat64:
-      Result.AsFloat64 := FJIT.InvokeFloat(AName, AArgs);
-
-  else
-    LInt := FJIT.Invoke(AName, AArgs);
+  if LIsVariadic then
+  begin
     case AReturn of
-      gvtInt8:    Result.AsInt8 := Int8(LInt);
-      gvtInt16:   Result.AsInt16 := Int16(LInt);
-      gvtInt32:   Result.AsInt32 := Int32(LInt);
-      gvtInt64:   Result.AsInt64 := LInt;
-      gvtUInt8:   Result.AsUInt8 := UInt8(LInt);
-      gvtUInt16:  Result.AsUInt16 := UInt16(LInt);
-      gvtUInt32:  Result.AsUInt32 := UInt32(LInt);
-      gvtUInt64:  Result.AsUInt64 := UInt64(LInt);
-      gvtPointer: Result.AsPointer := Pointer(LInt);
+      gvtFloat32:
+      begin
+        LFloat := FJIT.InvokeFloatRaw(AName, LRawArgs);
+        Result.AsFloat32 := Single(LFloat);
+      end;
+      gvtFloat64:
+        Result.AsFloat64 := FJIT.InvokeFloatRaw(AName, LRawArgs);
     else
-      Result.AsInt64 := LInt;
+      LInt := FJIT.InvokeRaw(AName, LRawArgs);
+      case AReturn of
+        gvtInt8:    Result.AsInt8 := Int8(LInt);
+        gvtInt16:   Result.AsInt16 := Int16(LInt);
+        gvtInt32:   Result.AsInt32 := Int32(LInt);
+        gvtInt64:   Result.AsInt64 := LInt;
+        gvtUInt8:   Result.AsUInt8 := UInt8(LInt);
+        gvtUInt16:  Result.AsUInt16 := UInt16(LInt);
+        gvtUInt32:  Result.AsUInt32 := UInt32(LInt);
+        gvtUInt64:  Result.AsUInt64 := UInt64(LInt);
+        gvtPointer: Result.AsPointer := Pointer(LInt);
+      else
+        Result.AsInt64 := LInt;
+      end;
+    end;
+  end
+  else
+  begin
+    case AReturn of
+      gvtFloat32:
+      begin
+        LFloat := FJIT.InvokeFloat(AName, AArgs);
+        Result.AsFloat32 := Single(LFloat);
+      end;
+      gvtFloat64:
+        Result.AsFloat64 := FJIT.InvokeFloat(AName, AArgs);
+    else
+      LInt := FJIT.Invoke(AName, AArgs);
+      case AReturn of
+        gvtInt8:    Result.AsInt8 := Int8(LInt);
+        gvtInt16:   Result.AsInt16 := Int16(LInt);
+        gvtInt32:   Result.AsInt32 := Int32(LInt);
+        gvtInt64:   Result.AsInt64 := LInt;
+        gvtUInt8:   Result.AsUInt8 := UInt8(LInt);
+        gvtUInt16:  Result.AsUInt16 := UInt16(LInt);
+        gvtUInt32:  Result.AsUInt32 := UInt32(LInt);
+        gvtUInt64:  Result.AsUInt64 := UInt64(LInt);
+        gvtPointer: Result.AsPointer := Pointer(LInt);
+      else
+        Result.AsInt64 := LInt;
+      end;
     end;
   end;
 end;

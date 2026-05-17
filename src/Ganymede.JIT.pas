@@ -55,6 +55,8 @@ type
     // User API - Dynamic invocation
     function Invoke(const APtr: Pointer; const AArgs: array of const): Int64; overload;
     function Invoke(const AName: string; const AArgs: array of const): Int64; overload;
+    function InvokeRaw(const AName: string; const AArgs: TArray<Int64>): Int64;
+    function InvokeFloatRaw(const AName: string; const AArgs: TArray<Int64>): Double;
     function InvokeFloat(const APtr: Pointer; const AArgs: array of const): Double; overload;
     function InvokeFloat(const AName: string; const AArgs: array of const): Double; overload;
 
@@ -418,6 +420,32 @@ begin
   if LPtr = nil then
     raise Exception.CreateFmt('Symbol not found: %s', [AName]);
   Result := Invoke(LPtr, AArgs);
+end;
+
+function TJIT.InvokeRaw(const AName: string; const AArgs: TArray<Int64>): Int64;
+var
+  LPtr: Pointer;
+begin
+  LPtr := GetSymbol(AName);
+  if LPtr = nil then
+    raise Exception.CreateFmt('Symbol not found: %s', [AName]);
+  if Length(AArgs) = 0 then
+    Result := DynCall(LPtr, nil, 0)
+  else
+    Result := DynCall(LPtr, @AArgs[0], Length(AArgs));
+end;
+
+function TJIT.InvokeFloatRaw(const AName: string; const AArgs: TArray<Int64>): Double;
+var
+  LPtr: Pointer;
+begin
+  LPtr := GetSymbol(AName);
+  if LPtr = nil then
+    raise Exception.CreateFmt('Symbol not found: %s', [AName]);
+  if Length(AArgs) = 0 then
+    Result := DynCallFloat(LPtr, nil, 0)
+  else
+    Result := DynCallFloat(LPtr, @AArgs[0], Length(AArgs));
 end;
 
 function TJIT.InvokeFloat(const APtr: Pointer; const AArgs: array of const): Double;

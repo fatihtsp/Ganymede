@@ -1317,6 +1317,15 @@ begin
       else
         Result := 'pointer'; // untyped pointer dereference
     end;
+  end
+
+  else if LNode.Kind = nkVarArgs then
+  begin
+    // varargs.count → int32, varargs.next(Type) → the specified type
+    if LNode.Text = 'count' then
+      Result := 'int32'
+    else if LNode.Text = 'next' then
+      Result := LNode.Extra; // type name stored by parser
   end;
 
   // Store resolved type on the node for the emitter to read

@@ -156,6 +156,7 @@
         <DCCReference Include="UTestbed.pas"/>
         <DCCReference Include="UTest.Overlays.pas"/>
         <DCCReference Include="UTest.RoutineTypes.pas"/>
+        <DCCReference Include="UTest.VariadicArgs.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

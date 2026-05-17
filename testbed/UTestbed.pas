@@ -34,7 +34,8 @@ uses
   UTest.Arrays,
   UTest.ChoicesSets,
   UTest.Overlays,
-  UTest.RoutineTypes;
+  UTest.RoutineTypes,
+  UTest.VariadicArgs;
 
 procedure Menu();
 var
@@ -78,7 +79,9 @@ begin
       .Add('Overlay Types',
         procedure begin TGnyTestCase.Run(TScriptOverlaysTest) end)
       .Add('Routine Types',
-        procedure begin TGnyTestCase.Run(TScriptRoutineTypesTest) end);
+        procedure begin TGnyTestCase.Run(TScriptRoutineTypesTest) end)
+      .Add('Variadic Arguments',
+        procedure begin TGnyTestCase.Run(TScriptVariadicArgsTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

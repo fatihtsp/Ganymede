@@ -1,0 +1,164 @@
+module mem test_mem_variadic_args;
+
+// =====================================================================
+// Test 1: sum variadic int64 args using next()
+// =====================================================================
+public routine sum_ints(count: int32; ...): int64;
+var
+  result: int64 = 0;
+  i: int32;
+begin
+  for i := 0 to count - 1 do
+    result += varargs.next(int64);
+  end
+  return result;
+end;
+
+// =====================================================================
+// Test 2: varargs.count — standalone variadic, count only
+// =====================================================================
+public routine va_count_test(...): int32;
+begin
+  return varargs.count;
+end;
+
+// =====================================================================
+// Test 3: mixed typed varargs — sum int32 values
+// =====================================================================
+public routine sum_i32(count: int32; ...): int32;
+var
+  result: int32 = 0;
+  i: int32;
+begin
+  for i := 0 to count - 1 do
+    result += varargs.next(int32);
+  end
+  return result;
+end;
+
+// =====================================================================
+// Test 4: varargs with float64
+// =====================================================================
+public routine sum_f64(count: int32; ...): float64;
+var
+  result: float64 = 0.0;
+  i: int32;
+begin
+  for i := 0 to count - 1 do
+    result += varargs.next(float64);
+  end
+  return result;
+end;
+
+// =====================================================================
+// Test 5: varargs.count with fixed params
+// =====================================================================
+public routine count_after_fixed(a: int32; b: int32; ...): int32;
+begin
+  return varargs.count;
+end;
+
+// =====================================================================
+// Test 6: single variadic arg
+// =====================================================================
+public routine single_va(...): int64;
+begin
+  return varargs.next(int64);
+end;
+
+// =====================================================================
+// Test 7: sequential next() without a loop
+// =====================================================================
+public routine seq_next(...): int64;
+var
+  a: int64;
+  b: int64;
+  c: int64;
+begin
+  a := varargs.next(int64);
+  b := varargs.next(int64);
+  c := varargs.next(int64);
+  return a + b + c;
+end;
+
+// =====================================================================
+// Test 8: multiple next() per loop iteration
+// =====================================================================
+public routine sum_pairs(count: int32; ...): int64;
+var
+  result: int64 = 0;
+  i: int32;
+  a: int64;
+  b: int64;
+begin
+  for i := 0 to count - 1 do
+    a := varargs.next(int64);
+    b := varargs.next(int64);
+    result += a * b;
+  end
+  return result;
+end;
+
+// =====================================================================
+// Test 9: stack spill — more than 3 variadic args
+// =====================================================================
+public routine sum_many(...): int64;
+var
+  result: int64 = 0;
+  i: int32;
+begin
+  for i := 0 to varargs.count - 1 do
+    result += varargs.next(int64);
+  end
+  return result;
+end;
+
+// =====================================================================
+// Test 10: zero varargs — only fixed params, no extras
+// =====================================================================
+public routine zero_va(x: int32; ...): int32;
+begin
+  return x + varargs.count;
+end;
+
+// =====================================================================
+// Helper: simple add for testing nested calls
+// =====================================================================
+routine add_two(a: int64; b: int64): int64;
+begin
+  return a + b;
+end;
+
+// =====================================================================
+// Test 11: nested — pass varargs.next() as arg to another function
+// =====================================================================
+public routine nested_va(...): int64;
+var
+  a: int64;
+  b: int64;
+begin
+  a := varargs.next(int64);
+  b := varargs.next(int64);
+  return add_two(a, b);
+end;
+
+// =====================================================================
+// Test 12: script-to-script variadic call
+// =====================================================================
+routine inner_va(n: int32; ...): int64;
+var
+  result: int64 = 0;
+  i: int32;
+begin
+  for i := 0 to n - 1 do
+    result += varargs.next(int64);
+  end
+  return result;
+end;
+
+public routine script_calls_va(): int64;
+begin
+  return inner_va(3, 100, 200, 300);
+end;
+
+end.

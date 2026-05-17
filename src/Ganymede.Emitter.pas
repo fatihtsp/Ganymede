@@ -304,6 +304,7 @@ var
   LNode: TGnyScriptNode;
   LChild: TGnyScriptNode;
   LRetType: TGnyValueType;
+  LIsVariadic: Boolean;
   LI: Integer;
 begin
   LNode := FNodes[AIndex];
@@ -314,9 +315,23 @@ begin
   else
     LRetType := gvtVoid;
 
-  // Begin function definition — cpplink routines use OverloadFunc to allow
-  // duplicate names with Itanium mangling; C linkage uses Func (unique names)
-  if ResolveLinkage(AIndex) = plDefault then
+  // Detect variadic: an nkVarArgs child with Text='...' marks ellipsis params
+  LIsVariadic := False;
+  for LI := 0 to Length(LNode.Children) - 1 do
+  begin
+    if (FNodes[LNode.Children[LI]].Kind = nkVarArgs) and
+       (FNodes[LNode.Children[LI]].Text = '...') then
+    begin
+      LIsVariadic := True;
+      Break;
+    end;
+  end;
+
+  // Begin function definition — variadic uses VariadicFunc, cpplink uses
+  // OverloadFunc for Itanium mangling, C linkage uses Func (unique names)
+  if LIsVariadic then
+    FBackend.VariadicFunc(LNode.Text, LRetType, False, LNode.IsPublic)
+  else if ResolveLinkage(AIndex) = plDefault then
     FBackend.OverloadFunc(LNode.Text, LRetType, False, LNode.IsPublic)
   else
     FBackend.Func(LNode.Text, LRetType, False, ResolveLinkage(AIndex), LNode.IsPublic);
@@ -334,6 +349,13 @@ begin
         // Named types (routine, record, etc.) — pointer-sized at ABI level
         FBackend.Arg(LChild.Text, gvtPointer);
     end;
+  end;
+
+  // Auto-declare a hidden index counter for varargs.next() sequential access
+  if LIsVariadic then
+  begin
+    FBackend.VarDecl('va__idx', gvtInt32);
+    FBackend.Let('va__idx', FBackend.Int32(0));
   end;
 
   // Emit type declarations first (records must be defined before use)
@@ -1693,6 +1715,25 @@ begin
   // Boolean literal
   else if LNode.Kind = nkBoolLit then
     Result := FBackend.Bool(LNode.Text = 'true')
+
+  // Variadic intrinsics — varargs.count / varargs.next(Type)
+  else if LNode.Kind = nkVarArgs then
+  begin
+    if LNode.Text = 'count' then
+      Result := FBackend.VaCount()
+    else if LNode.Text = 'next' then
+    begin
+      // Fetch the next variadic argument at the current index, then increment
+      LTempName := Format('__vt%d', [FTempIndex]);
+      Inc(FTempIndex);
+      FBackend.VarDecl(LTempName, ResolveValueType(LNode.Extra));
+      FBackend.Let(LTempName,
+        FBackend.VaArg(FBackend.Get('va__idx'),
+          ResolveValueType(LNode.Extra)));
+      FBackend.Incr('va__idx');
+      Result := FBackend.Get(LTempName);
+    end;
+  end
 
   // Identifier — variable/param reference, or enum constant
   else if LNode.Kind = nkIdent then

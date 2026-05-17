@@ -532,7 +532,8 @@ begin
   Result := nil;
   Expect(tkLParen);
 
-  while (not AtEnd()) and (PeekKind() <> tkRParen) do
+  while (not AtEnd()) and (PeekKind() <> tkRParen) and
+        (PeekKind() <> tkEllipsis) do
   begin
     // paramName : TypeExpr
     LNameTok := Expect(tkIdent);
@@ -560,6 +561,18 @@ begin
         RSScriptExpected, [''')'' or '';''', Peek().Text]);
       Break;
     end;
+  end;
+
+  // Variadic ellipsis: trailing ... after params or standalone (...)
+  if PeekKind() = tkEllipsis then
+  begin
+    LNameTok := Advance(); // consume ...
+    LParamNode := AddNode(nkVarArgs, LNameTok.Range);
+    LNode := FNodes[LParamNode];
+    LNode.Text := '...';
+    FNodes[LParamNode] := LNode;
+    SetLength(Result, Length(Result) + 1);
+    Result[Length(Result) - 1] := LParamNode;
   end;
 
   Expect(tkRParen);
@@ -1924,6 +1937,34 @@ begin
             (Advance().Kind <> tkComma);
     end;
     Expect(tkRBracket);
+  end
+
+  // varargs.next(TypeExpr) | varargs.count | varargs.copy()
+  else if LTok.Kind = tkVarArgs then
+  begin
+    Advance(); // consume 'varargs'
+    Expect(tkDot);
+    LTok := Expect(tkIdent); // 'next', 'count', or 'copy'
+
+    LLeft := AddNode(nkVarArgs, LTok.Range);
+    LNode := FNodes[LLeft];
+    LNode.Text := LTok.Text;
+    FNodes[LLeft] := LNode;
+
+    if LTok.Text = 'next' then
+    begin
+      Expect(tkLParen);
+      LNode := FNodes[LLeft];
+      LNode.Extra := ParseTypeExpr();
+      FNodes[LLeft] := LNode;
+      Expect(tkRParen);
+    end
+    else if LTok.Text = 'copy' then
+    begin
+      Expect(tkLParen);
+      Expect(tkRParen);
+    end;
+    // 'count' has no parentheses
   end
 
   else
