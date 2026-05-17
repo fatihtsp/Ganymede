@@ -371,6 +371,8 @@ var
   LLowBound: Integer;
   LHighBound: Integer;
   LI: Integer;
+  LChoicesValues: TArray<TGnyScriptChoicesValueInfo>;
+  LSetInfo: TGnyScriptSetTypeInfo;
 begin
   LNode := FNodes[AIndex];
   LTypeName := LNode.Text;
@@ -459,6 +461,39 @@ begin
     else
       // Untyped pointer
       FBackend.DefinePointer(LTypeName);
+  end
+
+  // Choices (enum) type
+  else if FNodes[LNode.Children[0]].Kind = nkChoicesType then
+  begin
+    LChoicesValues := FSemantics.GetChoicesValues(LTypeName);
+    if LChoicesValues <> nil then
+    begin
+      FBackend.DefineEnum(LTypeName);
+      for LI := 0 to Length(LChoicesValues) - 1 do
+      begin
+        if LChoicesValues[LI].HasExplicitOrdinal then
+          FBackend.EnumValue(LChoicesValues[LI].ValueName,
+            LChoicesValues[LI].ExplicitOrdinal)
+        else
+          FBackend.EnumValue(LChoicesValues[LI].ValueName);
+      end;
+      FBackend.EndEnum();
+    end;
+  end
+
+  // Set type
+  else if FNodes[LNode.Children[0]].Kind = nkSetType then
+  begin
+    if FSemantics.GetSetTypeInfo(LTypeName, LSetInfo) then
+    begin
+      if LSetInfo.IsRange then
+        FBackend.DefineSet(LTypeName, LSetInfo.LowBound, LSetInfo.HighBound)
+      else if LSetInfo.EnumTypeName <> '' then
+        FBackend.DefineSet(LTypeName, LSetInfo.EnumTypeName)
+      else
+        FBackend.DefineSet(LTypeName);
+    end;
   end;
 end;
 
@@ -1284,6 +1319,14 @@ begin
         end;
       end;
     end
+    // Set literal RHS — use LHS variable's annotated type for set construction
+    else if LRhsNode.Kind = nkSetLiteral then
+    begin
+      LRhsNode.Extra := LLhsNode.Extra; // type annotated by semantic pass
+      FNodes[LNode.Children[1]] := LRhsNode;
+      LRhsExpr := EmitExpr(LNode.Children[1]);
+      FBackend.Let(LLhsNode.Text, LRhsExpr);
+    end
     else
     begin
       LRhsExpr := EmitExpr(LNode.Children[1]);
@@ -1352,6 +1395,13 @@ var
   LRightFloat: Boolean;
   LInt64Val: Int64;
   LFmt: TFormatSettings;
+  LSetTypeName: string;
+  LSetChild: TGnyScriptNode;
+  LSetExpr: TGnyExpr;
+  LSetPiece: TGnyExpr;
+  LSetLow: Integer;
+  LSetHigh: Integer;
+  LChoicesValues: TArray<TGnyScriptChoicesValueInfo>;
 
   // Check if a child expression node resolved to a float type.
   // Recurses into binary/unary nodes whose result type isn't annotated.
@@ -1422,9 +1472,34 @@ begin
   else if LNode.Kind = nkBoolLit then
     Result := FBackend.Bool(LNode.Text = 'true')
 
-  // Identifier — variable/param reference
+  // Identifier — variable/param reference, or enum constant
   else if LNode.Kind = nkIdent then
-    Result := FBackend.Get(LNode.Text)
+  begin
+    // Check if this identifier is an enum constant (name matches a choices value)
+    if (LNode.Extra <> '') and FSemantics.IsChoicesType(LNode.Extra) then
+    begin
+      LChoicesValues := FSemantics.GetChoicesValues(LNode.Extra);
+      LLeft := TGnyExpr.None(); // sentinel — IsValid() returns False
+      if LChoicesValues <> nil then
+      begin
+        for LI := 0 to Length(LChoicesValues) - 1 do
+        begin
+          if LChoicesValues[LI].ValueName = LNode.Text then
+          begin
+            LLeft := FBackend.Int32(Int32(LChoicesValues[LI].ExplicitOrdinal));
+            Break;
+          end;
+        end;
+      end;
+      // If name matched an enum value, use it; otherwise it's a variable
+      if LLeft.IsValid() then
+        Result := LLeft
+      else
+        Result := FBackend.Get(LNode.Text);
+    end
+    else
+      Result := FBackend.Get(LNode.Text);
+  end
 
   // Unary operator
   else if LNode.Kind = nkUnary then
@@ -1652,7 +1727,12 @@ begin
       else if LNode.Text = 'and' then
         Result := FBackend.LogAnd(LLeft, LRight)
       else if LNode.Text = 'or' then
-        Result := FBackend.LogOr(LLeft, LRight);
+        Result := FBackend.LogOr(LLeft, LRight)
+
+      // Set membership: element in setExpr
+      else if LNode.Text = 'in' then
+        Result := FBackend.SetIn(LLeft, LRight);
+
       end; // else (numeric/boolean path)
     end;
   end
@@ -1784,6 +1864,53 @@ begin
         Result := FBackend.Deref(LLeft, LNode.Extra)
       else
         Result := FBackend.Deref(LLeft);
+    end;
+  end
+
+  // Set literal: [elem, range, ...]
+  else if LNode.Kind = nkSetLiteral then
+  begin
+    LSetTypeName := LNode.Extra; // annotated by EmitAssign or context
+
+    if Length(LNode.Children) = 0 then
+    begin
+      // Empty set: []
+      Result := FBackend.EmptySet(LSetTypeName);
+    end
+    else
+    begin
+      // Build set by unioning individual elements and ranges
+      LSetExpr := Default(TGnyExpr);
+
+      for LI := 0 to Length(LNode.Children) - 1 do
+      begin
+        LSetChild := FNodes[LNode.Children[LI]];
+
+        // Range element: nkBinary with Text = '..'
+        if (LSetChild.Kind = nkBinary) and (LSetChild.Text = '..') and
+           (Length(LSetChild.Children) >= 2) then
+        begin
+          LSetLow := StrToIntDef(FNodes[LSetChild.Children[0]].Text, 0);
+          LSetHigh := StrToIntDef(FNodes[LSetChild.Children[1]].Text, 0);
+          LSetPiece := FBackend.SetLitRange(LSetTypeName, LSetLow, LSetHigh);
+        end
+        // Single element: integer literal
+        else if LSetChild.Kind = nkIntLit then
+          LSetPiece := FBackend.SetLit(LSetTypeName,
+            [StrToIntDef(LSetChild.Text, 0)])
+        else
+          // General expression — convert to int and use as single element
+          LSetPiece := FBackend.SetLit(LSetTypeName,
+            [StrToIntDef(LSetChild.Text, 0)]);
+
+        // Combine with accumulator
+        if LI = 0 then
+          LSetExpr := LSetPiece
+        else
+          LSetExpr := FBackend.SetUnion(LSetExpr, LSetPiece);
+      end;
+
+      Result := LSetExpr;
     end;
   end;
 end;

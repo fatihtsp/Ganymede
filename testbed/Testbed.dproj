@@ -142,6 +142,7 @@
         <DCCReference Include="UCommon.pas"/>
         <DCCReference Include="UDemo.Performance.pas"/>
         <DCCReference Include="UTest.Arrays.pas"/>
+        <DCCReference Include="UTest.ChoicesSets.pas"/>
         <DCCReference Include="UTest.Constants.pas"/>
         <DCCReference Include="UTest.ControlFlow.pas"/>
         <DCCReference Include="UTest.ImportClause.pas"/>

@@ -41,6 +41,7 @@ uses
   UCommon in 'UCommon.pas',
   UDemo.Performance in 'UDemo.Performance.pas',
   UTest.Arrays in 'UTest.Arrays.pas',
+  UTest.ChoicesSets in 'UTest.ChoicesSets.pas',
   UTest.Constants in 'UTest.Constants.pas',
   UTest.ControlFlow in 'UTest.ControlFlow.pas',
   UTest.ImportClause in 'UTest.ImportClause.pas',

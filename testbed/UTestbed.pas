@@ -31,7 +31,8 @@ uses
   UTest.MatchStmt,
   UTest.Records,
   UTest.Pointers,
-  UTest.Arrays;
+  UTest.Arrays,
+  UTest.ChoicesSets;
 
 procedure Menu();
 var
@@ -69,7 +70,9 @@ begin
       .Add('Array Types',
         procedure begin TGnyTestCase.Run(TArraysTest) end)
       .Add('Pointer Types',
-        procedure begin TGnyTestCase.Run(TScriptPointersTest) end);
+        procedure begin TGnyTestCase.Run(TScriptPointersTest) end)
+      .Add('Choices & Sets',
+        procedure begin TGnyTestCase.Run(TScriptChoicesSetsTest) end);
     LMenu.Run();
   finally
     LMenu.Free();

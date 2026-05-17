@@ -56,6 +56,21 @@ type
     HighBound: Integer;
   end;
 
+  { TGnyScriptChoicesValueInfo — single value in a choices (enum) type }
+  TGnyScriptChoicesValueInfo = record
+    ValueName: string;
+    HasExplicitOrdinal: Boolean;
+    ExplicitOrdinal: Int64;
+  end;
+
+  { TGnyScriptSetTypeInfo — metadata for set types }
+  TGnyScriptSetTypeInfo = record
+    IsRange: Boolean;       // set of 0..255
+    LowBound: Integer;      // for range form
+    HighBound: Integer;     // for range form
+    EnumTypeName: string;   // for enum form: set of TColor
+  end;
+
   { TGnyScriptScope — one level of the scope stack }
   TGnyScriptScope = class
   private
@@ -79,6 +94,8 @@ type
     FRecordTypes: TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>;
     FArrayTypes: TDictionary<string, TGnyScriptArrayTypeInfo>;
     FPointerTypes: TDictionary<string, string>; // type name → pointee type name
+    FChoicesTypes: TDictionary<string, TArray<TGnyScriptChoicesValueInfo>>;
+    FSetTypes: TDictionary<string, TGnyScriptSetTypeInfo>;
     FLoopDepth: Integer;
 
     // Scope management
@@ -141,6 +158,15 @@ type
     function IsPointerType(const ATypeName: string): Boolean;
     function FindPointeeType(const ATypeName: string;
       var APointeeTypeName: string): Boolean;
+
+    // Choices (enum) type lookup (for emitter)
+    function IsChoicesType(const ATypeName: string): Boolean;
+    function GetChoicesValues(const ATypeName: string): TArray<TGnyScriptChoicesValueInfo>;
+
+    // Set type lookup (for emitter)
+    function IsSetType(const ATypeName: string): Boolean;
+    function GetSetTypeInfo(const ATypeName: string;
+      var AInfo: TGnyScriptSetTypeInfo): Boolean;
   end;
 
 const
@@ -217,6 +243,8 @@ begin
     FRecordTypes := TDictionary<string, TArray<TGnyScriptRecordFieldInfo>>.Create();
     FArrayTypes := TDictionary<string, TGnyScriptArrayTypeInfo>.Create();
     FPointerTypes := TDictionary<string, string>.Create();
+    FChoicesTypes := TDictionary<string, TArray<TGnyScriptChoicesValueInfo>>.Create();
+    FSetTypes := TDictionary<string, TGnyScriptSetTypeInfo>.Create();
   except
     on E: Exception do
     begin
@@ -228,6 +256,8 @@ end;
 
 destructor TGnyScriptSemantics.Destroy();
 begin
+  FSetTypes.Free();
+  FChoicesTypes.Free();
   FPointerTypes.Free();
   FArrayTypes.Free();
   FRecordTypes.Free();
@@ -665,6 +695,8 @@ var
   LBracketPos: Integer;
   LDotDotPos: Integer;
   LOfPos: Integer;
+  LInlineSetInfo: TGnyScriptSetTypeInfo;
+  LSetDotPos: Integer;
 begin
   LNode := FNodes[AIndex];
 
@@ -715,6 +747,28 @@ begin
       FPointerTypes.AddOrSetValue(LTypeName, '');
   end;
 
+  // Auto-register inline set types (e.g., "set of 0..255")
+  if LTypeName.StartsWith('set') and (not FSetTypes.ContainsKey(LTypeName)) then
+  begin
+    LInlineSetInfo := Default(TGnyScriptSetTypeInfo);
+    if LTypeName.StartsWith('set of ') then
+    begin
+      LSetDotPos := Pos('..', LTypeName);
+      if LSetDotPos > 0 then
+      begin
+        LInlineSetInfo.IsRange := True;
+        LInlineSetInfo.LowBound := StrToIntDef(Copy(LTypeName, 8, LSetDotPos - 8), 0);
+        LInlineSetInfo.HighBound := StrToIntDef(Copy(LTypeName, LSetDotPos + 2, MaxInt), 0);
+      end
+      else
+      begin
+        LInlineSetInfo.IsRange := False;
+        LInlineSetInfo.EnumTypeName := Copy(LTypeName, 8, MaxInt);
+      end;
+    end;
+    FSetTypes.AddOrSetValue(LTypeName, LInlineSetInfo);
+  end;
+
   // Analyze initializer expression if present
   if Length(LNode.Children) > 0 then
     ResolveExprType(LNode.Children[0]);
@@ -763,6 +817,12 @@ var
   LFieldCount: Integer;
   LDotPos: Integer;
   LI: Integer;
+  LChoicesValues: TArray<TGnyScriptChoicesValueInfo>;
+  LChoicesCount: Integer;
+  LNextOrdinal: Int64;
+  LEnumSym: TGnyScriptSymbol;
+  LValInfo: TGnyScriptChoicesValueInfo;
+  LSetInfo: TGnyScriptSetTypeInfo;
 begin
   LNode := FNodes[AIndex];
 
@@ -834,6 +894,79 @@ begin
   begin
     LRecNode := FNodes[LNode.Children[0]]; // reuse variable for pointer node
     FPointerTypes.AddOrSetValue(LNode.Text, LRecNode.Extra);
+  end
+
+  // If child is nkChoicesType, register enum values as constants
+  else if (Length(LNode.Children) > 0) and
+     (FNodes[LNode.Children[0]].Kind = nkChoicesType) then
+  begin
+    LRecNode := FNodes[LNode.Children[0]];
+    LFieldCount := 0;
+    SetLength(LFields, Length(LRecNode.Children)); // reuse LFields length var
+
+    SetLength(LChoicesValues, Length(LRecNode.Children));
+    LChoicesCount := 0;
+    LNextOrdinal := 0;
+
+    for LI := 0 to Length(LRecNode.Children) - 1 do
+    begin
+      LFieldNode := FNodes[LRecNode.Children[LI]];
+      if LFieldNode.Kind = nkConstDecl then
+      begin
+        // Register each enum value as a constant in the current scope
+        LEnumSym := Default(TGnyScriptSymbol);
+        LEnumSym.SymbolName := LFieldNode.Text;
+        LEnumSym.Kind := skConst;
+        LEnumSym.TypeName := LNode.Text; // type is the enum type name
+        LEnumSym.NodeIndex := LRecNode.Children[LI];
+        DeclareSymbol(LEnumSym);
+
+        // Collect metadata for emitter — compute ordinal
+        LValInfo := Default(TGnyScriptChoicesValueInfo);
+        LValInfo.ValueName := LFieldNode.Text;
+        LValInfo.HasExplicitOrdinal := Length(LFieldNode.Children) > 0;
+        if LValInfo.HasExplicitOrdinal and
+           (FNodes[LFieldNode.Children[0]].Kind = nkIntLit) then
+        begin
+          LNextOrdinal := StrToInt64Def(
+            FNodes[LFieldNode.Children[0]].Text, LNextOrdinal);
+        end;
+        LValInfo.ExplicitOrdinal := LNextOrdinal;
+        Inc(LNextOrdinal);
+        LChoicesValues[LChoicesCount] := LValInfo;
+        Inc(LChoicesCount);
+      end;
+    end;
+    SetLength(LChoicesValues, LChoicesCount);
+    FChoicesTypes.AddOrSetValue(LNode.Text, LChoicesValues);
+  end
+
+  // If child is nkSetType, register set type info
+  else if (Length(LNode.Children) > 0) and
+     (FNodes[LNode.Children[0]].Kind = nkSetType) then
+  begin
+    LRecNode := FNodes[LNode.Children[0]];
+    LSetInfo := Default(TGnyScriptSetTypeInfo);
+
+    if LRecNode.Text <> '' then
+    begin
+      // Range form: Text = "0..255"
+      LSetInfo.IsRange := True;
+      LDotPos := Pos('..', LRecNode.Text);
+      if LDotPos > 0 then
+      begin
+        LSetInfo.LowBound := StrToIntDef(Copy(LRecNode.Text, 1, LDotPos - 1), 0);
+        LSetInfo.HighBound := StrToIntDef(Copy(LRecNode.Text, LDotPos + 2, MaxInt), 0);
+      end;
+    end
+    else if LRecNode.Extra <> '' then
+    begin
+      // Enum form: Extra = enum type name
+      LSetInfo.IsRange := False;
+      LSetInfo.EnumTypeName := LRecNode.Extra;
+    end;
+
+    FSetTypes.AddOrSetValue(LNode.Text, LSetInfo);
   end;
 end;
 
@@ -915,7 +1048,10 @@ begin
   else if LNode.Kind = nkIdent then
   begin
     if FindSymbol(LNode.Text, LSym) then
-      Result := LSym.TypeName
+    begin
+      Result := LSym.TypeName;
+      StoreType(Result);
+    end
     else
       FErrors.Add(LNode.Range, esError, GNY_ERROR_SCRIPT_SEM_UNDECLARED,
         RSScriptUndeclaredIdent, [LNode.Text]);
@@ -931,7 +1067,8 @@ begin
       // Comparison operators always produce boolean
       if (LNode.Text = '=') or (LNode.Text = '<>') or
          (LNode.Text = '<') or (LNode.Text = '>') or
-         (LNode.Text = '<=') or (LNode.Text = '>=') then
+         (LNode.Text = '<=') or (LNode.Text = '>=') or
+         (LNode.Text = 'in') then
         Result := 'boolean'
 
       // / always produces float64 (by language design)
@@ -1177,6 +1314,62 @@ begin
 
   // Named pointer types registered via type block
   Result := FPointerTypes.TryGetValue(ATypeName, APointeeTypeName);
+end;
+
+//------------------------------------------------------------------------------
+// Choices (enum) type lookup
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.IsChoicesType(const ATypeName: string): Boolean;
+begin
+  Result := FChoicesTypes.ContainsKey(ATypeName);
+end;
+
+function TGnyScriptSemantics.GetChoicesValues(
+  const ATypeName: string): TArray<TGnyScriptChoicesValueInfo>;
+begin
+  if not FChoicesTypes.TryGetValue(ATypeName, Result) then
+    Result := nil;
+end;
+
+//------------------------------------------------------------------------------
+// Set type lookup
+//------------------------------------------------------------------------------
+
+function TGnyScriptSemantics.IsSetType(const ATypeName: string): Boolean;
+begin
+  Result := FSetTypes.ContainsKey(ATypeName) or
+            ATypeName.StartsWith('set of ');
+end;
+
+function TGnyScriptSemantics.GetSetTypeInfo(const ATypeName: string;
+  var AInfo: TGnyScriptSetTypeInfo): Boolean;
+var
+  LDotPos: Integer;
+begin
+  // Try registered named set types first
+  Result := FSetTypes.TryGetValue(ATypeName, AInfo);
+  if Result then
+    Exit;
+
+  // Inline set types: "set of 0..255"
+  if ATypeName.StartsWith('set of ') then
+  begin
+    AInfo := Default(TGnyScriptSetTypeInfo);
+    LDotPos := Pos('..', ATypeName);
+    if LDotPos > 0 then
+    begin
+      AInfo.IsRange := True;
+      AInfo.LowBound := StrToIntDef(Copy(ATypeName, 8, LDotPos - 8), 0);
+      AInfo.HighBound := StrToIntDef(Copy(ATypeName, LDotPos + 2, MaxInt), 0);
+    end
+    else
+    begin
+      AInfo.IsRange := False;
+      AInfo.EnumTypeName := Copy(ATypeName, 8, MaxInt);
+    end;
+    Result := True;
+  end;
 end;
 
 end.

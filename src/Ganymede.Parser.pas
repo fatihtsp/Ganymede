@@ -121,6 +121,8 @@ type
     function ParseRecordType(): Integer;
     function ParseArrayType(): Integer;
     function ParsePointerType(): Integer;
+    function ParseChoicesType(): Integer;
+    function ParseSetType(): Integer;
     function TryParseAssign(const ALhs: Integer): Integer;
 
     // Parsers — expressions (Pratt)
@@ -606,6 +608,28 @@ begin
     end
     else
       Result := 'pointer';
+  end
+  // Set type: set [of (integer .. integer | TypeExpr)]
+  else if LTok.Kind = tkSet then
+  begin
+    Advance(); // consume 'set'
+    if PeekKind() = tkOf then
+    begin
+      Advance(); // consume 'of'
+      // Check for integer range: set of 0..255
+      if (PeekKind() = tkIntLit) and (FPos + 1 < FTokens.Count) and
+         (FTokens[FPos + 1].Kind = tkRange) then
+      begin
+        LLowTok := Expect(tkIntLit);
+        Expect(tkRange);
+        LHighTok := Expect(tkIntLit);
+        Result := 'set of ' + LLowTok.Text + '..' + LHighTok.Text;
+      end
+      else
+        Result := 'set of ' + ParseTypeExpr();
+    end
+    else
+      Result := 'set';
   end
   else
   begin
@@ -1296,6 +1320,20 @@ begin
       if LTypeDefNode >= 0 then
         AddChild(LTypeDeclNode, LTypeDefNode);
     end
+    // Choices (enum) type
+    else if PeekKind() = tkChoices then
+    begin
+      LTypeDefNode := ParseChoicesType();
+      if LTypeDefNode >= 0 then
+        AddChild(LTypeDeclNode, LTypeDefNode);
+    end
+    // Set type
+    else if PeekKind() = tkSet then
+    begin
+      LTypeDefNode := ParseSetType();
+      if LTypeDefNode >= 0 then
+        AddChild(LTypeDeclNode, LTypeDefNode);
+    end
     else
     begin
       FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_UNEXPECTED,
@@ -1449,6 +1487,99 @@ begin
   // else: untyped pointer (Extra remains empty)
 
   Result := LPtrNode;
+end;
+
+//------------------------------------------------------------------------------
+// Choices (enum) type: choices(red, green = 5, blue)
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseChoicesType(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LChoicesNode: Integer;
+  LValueNode: Integer;
+  LNode: TGnyScriptNode;
+  LExprNode: Integer;
+begin
+  LTok := Expect(tkChoices);
+  LChoicesNode := AddNode(nkChoicesType, LTok.Range);
+
+  Expect(tkLParen);
+
+  // Parse comma-separated values: ident [ = expr ]
+  while (not AtEnd()) and (PeekKind() <> tkRParen) do
+  begin
+    LTok := Expect(tkIdent);
+    LValueNode := AddNode(nkConstDecl, LTok.Range);
+    LNode := FNodes[LValueNode];
+    LNode.Text := LTok.Text;
+    FNodes[LValueNode] := LNode;
+
+    // Optional explicit ordinal: = Expression
+    if Match(tkEq) then
+    begin
+      LExprNode := ParseExpression(BP_NONE);
+      AddChild(LValueNode, LExprNode);
+    end;
+
+    AddChild(LChoicesNode, LValueNode);
+
+    if PeekKind() = tkComma then
+      Advance()
+    else if PeekKind() <> tkRParen then
+    begin
+      FErrors.Add(Peek().Range, esError, GNY_ERROR_SCRIPT_EXPECTED_TOKEN,
+        RSScriptExpected, [''')'' or '',''', Peek().Text]);
+      Break;
+    end;
+  end;
+
+  Expect(tkRParen);
+
+  Result := LChoicesNode;
+end;
+
+//------------------------------------------------------------------------------
+// Set type: set [of (integer .. integer | TypeExpr)]
+//------------------------------------------------------------------------------
+
+function TGnyScriptParser.ParseSetType(): Integer;
+var
+  LTok: TGnyScriptToken;
+  LSetNode: Integer;
+  LNode: TGnyScriptNode;
+  LLowTok: TGnyScriptToken;
+  LHighTok: TGnyScriptToken;
+begin
+  LTok := Expect(tkSet);
+  LSetNode := AddNode(nkSetType, LTok.Range);
+
+  if PeekKind() = tkOf then
+  begin
+    Advance(); // consume 'of'
+
+    // Check for integer range: set of 0..255
+    if (PeekKind() = tkIntLit) and (FPos + 1 < FTokens.Count) and
+       (FTokens[FPos + 1].Kind = tkRange) then
+    begin
+      LLowTok := Expect(tkIntLit);
+      Expect(tkRange);
+      LHighTok := Expect(tkIntLit);
+      LNode := FNodes[LSetNode];
+      LNode.Text := LLowTok.Text + '..' + LHighTok.Text;
+      FNodes[LSetNode] := LNode;
+    end
+    else
+    begin
+      // Set of enum type: set of TMyEnum
+      LNode := FNodes[LSetNode];
+      LNode.Extra := ParseTypeExpr();
+      FNodes[LSetNode] := LNode;
+    end;
+  end;
+  // else: bare 'set' — untyped set (Text and Extra remain empty)
+
+  Result := LSetNode;
 end;
 
 //------------------------------------------------------------------------------
@@ -1653,6 +1784,36 @@ begin
     LLeft := AddNode(nkAddressOf, LTok.Range);
     LRight := ParseExpression(BP_UNARY);
     AddChild(LLeft, LRight);
+  end
+
+  // Set literal: [ expr [.. expr] { , expr [.. expr] } ]
+  else if LTok.Kind = tkLBracket then
+  begin
+    Advance(); // consume '['
+    LLeft := AddNode(nkSetLiteral, LTok.Range);
+    if PeekKind() <> tkRBracket then
+    begin
+      repeat
+        LRight := ParseExpression(BP_NONE);
+        // Check for range element: expr .. expr
+        if PeekKind() = tkRange then
+        begin
+          Advance(); // consume '..'
+          LArgNode := ParseExpression(BP_NONE);
+          LOpNode := AddNode(nkBinary, FNodes[LRight].Range);
+          LNode := FNodes[LOpNode];
+          LNode.Text := '..';
+          FNodes[LOpNode] := LNode;
+          AddChild(LOpNode, LRight);
+          AddChild(LOpNode, LArgNode);
+          AddChild(LLeft, LOpNode);
+        end
+        else
+          AddChild(LLeft, LRight);
+      until (AtEnd()) or (PeekKind() <> tkComma) or
+            (Advance().Kind <> tkComma);
+    end;
+    Expect(tkRBracket);
   end
 
   else
