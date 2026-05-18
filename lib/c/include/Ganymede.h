@@ -1,11 +1,11 @@
 /*=============================================================================
-  Ganymede(TM) - Embeddable Native Scripting Engine
+  Ganymede™ - Embeddable Native Scripting Engine
   C/C++ Single-Header Dynamic Loader
-
-  Copyright (c) 2026-present tinyBigGAMES(TM) LLC
+  
+  Copyright © 2026-present tinyBigGAMES™ LLC
   All Rights Reserved.
 
-  See LICENSE for license information
+  See LICENSE for license information  
 =============================================================================*/
 
 /**
