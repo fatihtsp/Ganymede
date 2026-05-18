@@ -14,13 +14,7 @@ unit UTest.ImportClause;
 interface
 
 uses
-  System.SysUtils,
-  System.IOUtils,
-  Ganymede.Utils,
-  Ganymede.TestCase,
-  Ganymede.Core,
-  Ganymede.Native,
-  UCommon;
+  Ganymede.TestCase;
 
 type
   { TScriptImportClauseTest }
@@ -33,6 +27,11 @@ type
 
 implementation
 
+uses
+  System.SysUtils,
+  System.IOUtils,
+  UCommon,
+  Ganymede;
 
 { TScriptImportClauseTest }
 
@@ -45,77 +44,84 @@ end;
 
 procedure TScriptImportClauseTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int64;
   LLibPath: string;
 begin
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
+  begin
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
   //--- Test 1: Basic scoped import — source compiled inline -------------------
   Section('import test_lib_mathlib — source compiled inline');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_basic.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_basic.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with scoped import');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'lib_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 2: Multi-import ---------------------------------------------------
   Section('import test_lib_mathlib, test_lib_mathlib2 — multi-import');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_multi.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_multi.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with multi-import');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 37, 'lib_add(3,4)+lib_mul(5,6) = %d (expected 37)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 3: Import module with external DLL declaration --------------------
   Section('import test_dll_crtlib — external "msvcrt" via import');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_dll.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_dll.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with DLL import via import clause');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 42, 'abs(-42) = %d (expected 42)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 4: Lib creation — compile module lib to .lib ----------------------
@@ -123,13 +129,13 @@ begin
   LLibPath := TPath.Combine('output', 'test_lib_mathlib.lib');
   if TFile.Exists(LLibPath) then
     TFile.Delete(LLibPath);
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_lib_mathlib.gny'));
-    if not LScript.Compile() then
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_lib_mathlib.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Lib compile failed');
     end
     else
@@ -138,67 +144,67 @@ begin
       Check(TFile.Exists(LLibPath), 'test_lib_mathlib.lib exists at %s', [LLibPath]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 5: External .lib declaration in module mem -------------------------
   Section('module mem — source-level external .lib');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath('output')
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_external_lib.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode('output')));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_external_lib.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with source-level .lib external');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'lib_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 6: External DLL declaration in module mem -------------------------
   Section('module mem — source-level external "msvcrt"');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_external_dll.gny'));
-    if not LScript.Compile() then
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_external_dll.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with source-level external');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 42, 'abs(-42) = %d (expected 42)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 6: External declaration in module lib -----------------------------
   Section('module lib — source-level external + own routine');
   LLibPath := TPath.Combine('output', 'test_lib_external_dll.lib');
   if TFile.Exists(LLibPath) then
     TFile.Delete(LLibPath);
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_lib_external_dll.gny'));
-    if not LScript.Compile() then
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_lib_external_dll.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Lib compile failed');
     end
     else
@@ -207,48 +213,48 @@ begin
       Check(TFile.Exists(LLibPath), 'test_lib_external_dll.lib exists');
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 7: mem imports .gny with external .lib ----------------------------
   Section('module mem — import ext wrapper for .lib');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .AddLibPath('output')
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_lib_ext.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode('output')));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_lib_ext.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled mem with imported .lib external');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'lib_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 8: lib imports .gny with external .lib ----------------------------
   Section('module lib — import ext wrapper for .lib');
   LLibPath := TPath.Combine('output', 'test_lib_import_lib_ext.lib');
   if TFile.Exists(LLibPath) then
     TFile.Delete(LLibPath);
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .AddLibPath('output')
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_lib_import_lib_ext.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode('output')));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_lib_import_lib_ext.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Lib compile failed');
     end
     else
@@ -257,47 +263,47 @@ begin
       Check(TFile.Exists(LLibPath), 'test_lib_import_lib_ext.lib exists');
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 9: Import not found -----------------------------------------------
   Section('import nonexistent — expect compile error');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_bad.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_bad.gny'))));
+    if not gny_compile(LEngine) then
       Check(True, 'Compile correctly failed for missing import')
     else
       Check(False, 'Compile should have failed but succeeded');
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 10: Overloaded cpplink exports via import -------------------------
   Section('import test_lib_overload — cpplink overloads');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_overload.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_overload.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with overloaded cpplink imports');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 94, 'compute(5)+compute(3,4)+add(10,20) = %d (expected 94)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 11: Compile overload lib to .lib ----------------------------------
@@ -305,13 +311,13 @@ begin
   LLibPath := TPath.Combine('output', 'test_lib_overload.lib');
   if TFile.Exists(LLibPath) then
     TFile.Delete(LLibPath);
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_lib_overload.gny'));
-    if not LScript.Compile() then
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_lib_overload.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Lib compile failed');
     end
     else
@@ -320,31 +326,31 @@ begin
       Check(TFile.Exists(LLibPath), 'test_lib_overload.lib exists at %s', [LLibPath]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 12: External cpplink overloads from .lib --------------------------
   Section('module mem — external cpplink overloads from .lib');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath('output')
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_external_overload_lib.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode('output')));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_external_overload_lib.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with external cpplink overloads from .lib');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 94, 'compute(5)+compute(3,4)+add(10,20) = %d (expected 94)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 13: Compile module dll — C linkage --------------------------------
@@ -352,14 +358,15 @@ begin
   LLibPath := TPath.Combine(ExtractFilePath(ParamStr(0)), 'test_dll_mathlib.dll');
   if TFile.Exists(LLibPath) then
     TFile.Delete(LLibPath);
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .SetOutputPath(ExtractFilePath(ParamStr(0)))
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_dll_mathlib.gny'));
-    if not LScript.Compile() then
+    gny_set_output_path(LEngine,
+      PAnsiChar(UTF8Encode(ExtractFilePath(ParamStr(0)))));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_dll_mathlib.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'DLL compile failed');
     end
     else
@@ -368,68 +375,69 @@ begin
       Check(TFile.Exists(LLibPath), 'test_dll_mathlib.dll exists at %s', [LLibPath]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 14: External .dll declaration in module mem (C linkage) ------------
   Section('module mem — external .dll C linkage');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_external_dll_custom.gny'));
-    if not LScript.Compile() then
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_external_dll_custom.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with external .dll C linkage');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'lib_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 15: mem imports wrapper with external .dll (C linkage) -------------
   Section('module mem — import wrapper with external .dll');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .AddLibPath(CTestDir)
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_import_dll_custom_ext.gny'));
-    if not LScript.Compile() then
+    gny_add_lib_path(LEngine, PAnsiChar(UTF8Encode(CTestDir)));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_import_dll_custom_ext.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled mem with imported .dll external');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'lib_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
-
   //--- Test 16: Compile overload dll to .dll (cpplink) ------------------------
   Section('module dll — compile overload dll to .dll');
   LLibPath := TPath.Combine(ExtractFilePath(ParamStr(0)), 'test_dll_overload.dll');
   if TFile.Exists(LLibPath) then
     TFile.Delete(LLibPath);
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .SetOutputPath(ExtractFilePath(ParamStr(0)))
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_dll_overload.gny'));
-    if not LScript.Compile() then
+    gny_set_output_path(LEngine,
+      PAnsiChar(UTF8Encode(ExtractFilePath(ParamStr(0)))));
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_dll_overload.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'DLL compile failed');
     end
     else
@@ -438,31 +446,34 @@ begin
       Check(TFile.Exists(LLibPath), 'test_dll_overload.dll exists at %s', [LLibPath]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
 
   //--- Test 17: External cpplink overloads from .dll --------------------------
   Section('module mem — external cpplink overloads from .dll');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript
-      .LoadFromFile(TPath.Combine(CTestDir, 'test_mem_external_overload_dll.gny'));
-    if not LScript.Compile() then
+    gny_load_from_file(LEngine,
+      PAnsiChar(UTF8Encode(TPath.Combine(CTestDir, 'test_mem_external_overload_dll.gny'))));
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled with external cpplink overloads from .dll');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 94, 'compute(5)+compute(3,4)+add(10,20) = %d (expected 94)', [LResult]);
     end;
   finally
-    LScript.PrintErrors();
-    LScript.Free();
+    gny_print_errors(LEngine);
+    gny_destroy(LEngine);
   end;
+
+  gny_unload();
 end;
 
 end.

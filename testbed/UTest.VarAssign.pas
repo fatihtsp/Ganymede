@@ -27,10 +27,8 @@ type
 implementation
 
 uses
-  System.SysUtils,
-  Ganymede.Utils,
-  Ganymede.Native,
-  Ganymede.Core;
+  UCommon,
+  Ganymede;
 
 const
   CVarAssignSource =
@@ -67,46 +65,65 @@ end;
 
 procedure TScriptVarAssignTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int64;
   LCompute: TComputeFunc;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
 begin
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Compile & JIT (opt level %d)', [LOrd]);
-    LScript := TGanymede.Create();
-    try
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromString(CVarAssignSource, 'vartest.pxs');
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-      if not LScript.Compile() then
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
+  begin
+    Section('Compile & JIT (opt level %d)', [LOptLevel]);
+    LEngine := gny_create();
+    try
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_string(LEngine,
+        PAnsiChar(UTF8Encode(CVarAssignSource)),
+        PAnsiChar(UTF8Encode('vartest.pxs')));
+
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
-      LResult := LScript.Invoke('compute', [5], gvtInt64).AsInt64;
-      Check(LResult = 29, 'compute(5) = %d (expected 29, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 5);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('compute')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 29, 'compute(5) = %d (expected 29, opt %d)',
+        [LResult, LOptLevel]);
 
-      LCompute := LScript.GetSymbol('compute');
+      LCompute := gny_get_symbol(LEngine,
+        PAnsiChar(UTF8Encode('compute')));
       LResult := LCompute(5);
-      Check(LResult = 29, 'direct compute(5) = %d (expected 29, opt %d)', [LResult, LOrd]);
+      Check(LResult = 29, 'direct compute(5) = %d (expected 29, opt %d)',
+        [LResult, LOptLevel]);
 
-      LResult := LScript.Invoke('compute', [0], gvtInt64).AsInt64;
-      Check(LResult = 19, 'compute(0) = %d (expected 19, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 0);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('compute')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 19, 'compute(0) = %d (expected 19, opt %d)',
+        [LResult, LOptLevel]);
 
-      LResult := LScript.Invoke('compute', [-3], gvtInt64).AsInt64;
-      Check(LResult = 13, 'compute(-3) = %d (expected 13, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, -3);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('compute')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 13, 'compute(-3) = %d (expected 13, opt %d)',
+        [LResult, LOptLevel]);
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

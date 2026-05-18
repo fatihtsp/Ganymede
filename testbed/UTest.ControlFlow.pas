@@ -27,9 +27,8 @@ type
 implementation
 
 uses
-  System.SysUtils,
-  Ganymede.Native,
-  Ganymede.Core;
+  UCommon,
+  Ganymede;
 
 const
   CControlFlowSource =
@@ -153,69 +152,89 @@ end;
 
 procedure TScriptControlFlowTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int64;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
 begin
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Control Flow — opt level %d', [LOrd]);
-    LScript := TGanymede.Create();
-    try
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromString(CControlFlowSource, 'ctrlflow.pxs');
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-      if not LScript.Compile() then
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
+  begin
+    Section('Control Flow — opt level %d', [LOptLevel]);
+    LEngine := gny_create();
+    try
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_string(LEngine,
+        PAnsiChar(UTF8Encode(CControlFlowSource)),
+        PAnsiChar(UTF8Encode('ctrlflow.pxs')));
+
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
       // whilesum(10): 1+2+...+10 = 55
-      LResult := LScript.Invoke('whilesum', [10], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 10);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('whilesum')), GNY_VT_INT64).AsInt64;
       Check(LResult = 55,
-        'whilesum(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
+        'whilesum(10) = %d (expected 55, opt %d)', [LResult, LOptLevel]);
 
       // forsum(10): 1+2+...+10 = 55
-      LResult := LScript.Invoke('forsum', [10], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 10);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('forsum')), GNY_VT_INT64).AsInt64;
       Check(LResult = 55,
-        'forsum(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
+        'forsum(10) = %d (expected 55, opt %d)', [LResult, LOptLevel]);
 
       // countdown(10): 10+9+...+1 = 55
-      LResult := LScript.Invoke('countdown', [10], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 10);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('countdown')), GNY_VT_INT64).AsInt64;
       Check(LResult = 55,
-        'countdown(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
+        'countdown(10) = %d (expected 55, opt %d)', [LResult, LOptLevel]);
 
       // repeatsum(10): 1+2+...+10 = 55
-      LResult := LScript.Invoke('repeatsum', [10], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 10);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('repeatsum')), GNY_VT_INT64).AsInt64;
       Check(LResult = 55,
-        'repeatsum(10) = %d (expected 55, opt %d)', [LResult, LOrd]);
+        'repeatsum(10) = %d (expected 55, opt %d)', [LResult, LOptLevel]);
 
       // earlyexit(100): 1+2+3+4+5 = 15 (s>10 triggers leave before adding 6)
-      LResult := LScript.Invoke('earlyexit', [100], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 100);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('earlyexit')), GNY_VT_INT64).AsInt64;
       Check(LResult = 15,
-        'earlyexit(100) = %d (expected 15, opt %d)', [LResult, LOrd]);
+        'earlyexit(100) = %d (expected 15, opt %d)', [LResult, LOptLevel]);
 
       // skipodd(10): 1+3+5+7+9 = 25 (skip evens)
-      LResult := LScript.Invoke('skipodd', [10], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 10);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('skipodd')), GNY_VT_INT64).AsInt64;
       Check(LResult = 25,
-        'skipodd(10) = %d (expected 25, opt %d)', [LResult, LOrd]);
+        'skipodd(10) = %d (expected 25, opt %d)', [LResult, LOptLevel]);
 
-      // nested(3): sum of i*j for i,j in 1..3
-      // = 1*1+1*2+1*3+2*1+2*2+2*3+3*1+3*2+3*3
-      // = (1+2+3)*(1+2+3) = 6*6 = 36
-      LResult := LScript.Invoke('nested', [3], gvtInt64).AsInt64;
+      // nested(3): sum of i*j for i,j in 1..3 = 36
+      gny_arg_push_int32(LEngine, 3);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('nested')), GNY_VT_INT64).AsInt64;
       Check(LResult = 36,
-        'nested(3) = %d (expected 36, opt %d)', [LResult, LOrd]);
+        'nested(3) = %d (expected 36, opt %d)', [LResult, LOptLevel]);
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

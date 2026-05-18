@@ -17,6 +17,7 @@ procedure PrintBenchmarkReference();
 
 const
   CTestDir = 'tests';
+  CDllPath = '..\lib\bin\Ganymede.dll';
 
 implementation
 

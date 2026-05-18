@@ -14,13 +14,7 @@ unit UTest.RoutineTypes;
 interface
 
 uses
-  System.SysUtils,
-  System.IOUtils,
-  Ganymede.Utils,
-  Ganymede.TestCase,
-  Ganymede.Core,
-  Ganymede.Native,
-  UCommon;
+  Ganymede.TestCase;
 
 type
   TScriptRoutineTypesTest = class(TGnyTestCase)
@@ -32,6 +26,10 @@ type
 
 implementation
 
+uses
+  System.IOUtils,
+  UCommon,
+  Ganymede;
 { TScriptRoutineTypesTest }
 
 constructor TScriptRoutineTypesTest.Create();
@@ -43,88 +41,77 @@ end;
 
 procedure TScriptRoutineTypesTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LVal: Int32;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
   LFile: string;
 begin
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
+  begin
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
+
   LFile := TPath.Combine(CTestDir, 'test_mem_routine_types.gny');
 
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Routine Types — opt level %d', [LOrd]);
-    LScript := TGanymede.Create();
+    Section('Routine Types — opt level %d', [LOptLevel]);
+    LEngine := gny_create();
     try
-      //LScript.SetDumpIR(True);
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromFile(LFile);
-
-      if not LScript.Compile() then
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_file(LEngine, PAnsiChar(UTF8Encode(LFile)));
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      //writeln(LScript.GetSSADump());
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_basic')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 7, 'test_basic = %d (exp 7, opt %d)', [LVal, LOptLevel]);
 
-      // 1: basic assign + call
-      LVal := LScript.Invoke('test_basic', [], gvtInt32).AsInt32;
-      Check(LVal = 7, 'test_basic = %d (exp 7, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_reassign')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 20, 'test_reassign = %d (exp 20, opt %d)', [LVal, LOptLevel]);
 
-      // 2: reassign to different function
-      LVal := LScript.Invoke('test_reassign', [], gvtInt32).AsInt32;
-      Check(LVal = 20, 'test_reassign = %d (exp 20, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_callback')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 13, 'test_callback = %d (exp 13, opt %d)', [LVal, LOptLevel]);
 
-      // 3: callback — funcptr as parameter
-      LVal := LScript.Invoke('test_callback', [], gvtInt32).AsInt32;
-      Check(LVal = 13, 'test_callback = %d (exp 13, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_void_indirect')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 123, 'test_void_indirect = %d (exp 123, opt %d)', [LVal, LOptLevel]);
 
-      // 4: void indirect call — side effect
-      LVal := LScript.Invoke('test_void_indirect', [], gvtInt32).AsInt32;
-      Check(LVal = 123, 'test_void_indirect = %d (exp 123, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_nullary')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 7, 'test_nullary = %d (exp 7, opt %d)', [LVal, LOptLevel]);
 
-      // 5: nullary routine type (no params)
-      LVal := LScript.Invoke('test_nullary', [], gvtInt32).AsInt32;
-      Check(LVal = 7, 'test_nullary = %d (exp 7, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_nullary_reassign')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 49, 'test_nullary_reassign = %d (exp 49, opt %d)', [LVal, LOptLevel]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_array')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 50, 'test_array = %d (exp 50, opt %d)', [LVal, LOptLevel]);
 
-      // 6: reassign nullary
-      LVal := LScript.Invoke('test_nullary_reassign', [], gvtInt32).AsInt32;
-      Check(LVal = 49, 'test_nullary_reassign = %d (exp 49, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_global')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 42, 'test_global = %d (exp 42, opt %d)', [LVal, LOptLevel]);
 
-      // 7: funcptr in static array — add(10,3)+sub(10,3)+mul(10,3) = 13+7+30 = 50
-      LVal := LScript.Invoke('test_array', [], gvtInt32).AsInt32;
-      Check(LVal = 50, 'test_array = %d (exp 50, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_chain')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 10, 'test_chain = %d (exp 10, opt %d)', [LVal, LOptLevel]);
 
-      // 8: global funcptr variable — mul(6,7) = 42
-      LVal := LScript.Invoke('test_global', [], gvtInt32).AsInt32;
-      Check(LVal = 42, 'test_global = %d (exp 42, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_multi_callback')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 19, 'test_multi_callback = %d (exp 19, opt %d)', [LVal, LOptLevel]);
 
-      // 9: chain — add(add(1,2), add(3,4)) = add(3,7) = 10
-      LVal := LScript.Invoke('test_chain', [], gvtInt32).AsInt32;
-      Check(LVal = 10, 'test_chain = %d (exp 10, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_loop')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 15, 'test_loop = %d (exp 15, opt %d)', [LVal, LOptLevel]);
 
-      // 10: multiple callback params — add(3,4)+mul(3,4) = 7+12 = 19
-      LVal := LScript.Invoke('test_multi_callback', [], gvtInt32).AsInt32;
-      Check(LVal = 19, 'test_multi_callback = %d (exp 19, opt %d)', [LVal, LOrd]);
+      LVal := gny_invoke(LEngine, PAnsiChar(UTF8Encode('test_swap_callback')), GNY_VT_INT32).AsInt32;
+      Check(LVal = 20, 'test_swap_callback = %d (exp 20, opt %d)', [LVal, LOptLevel]);
 
-      // 11: indirect call in loop — sum 1..5 = 15
-      LVal := LScript.Invoke('test_loop', [], gvtInt32).AsInt32;
-      Check(LVal = 15, 'test_loop = %d (exp 15, opt %d)', [LVal, LOrd]);
-
-      // 12: different funcptrs to same callback — apply(add,10,5)+apply(sub,10,5) = 15+5 = 20
-      LVal := LScript.Invoke('test_swap_callback', [], gvtInt32).AsInt32;
-      Check(LVal = 20, 'test_swap_callback = %d (exp 20, opt %d)', [LVal, LOrd]);
-
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

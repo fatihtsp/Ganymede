@@ -27,10 +27,8 @@ type
 implementation
 
 uses
-  System.SysUtils,
-  Ganymede.Utils,
-  Ganymede.Native,
-  Ganymede.Core;
+  UCommon,
+  Ganymede;
 
 const
   CStringIOSource =
@@ -135,64 +133,82 @@ end;
 
 procedure TScriptStringIOTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int64;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
 begin
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Compile & JIT (opt level %d)', [LOrd]);
-    LScript := TGanymede.Create();
-    try
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.SetDumpIR(True);
-      LScript.LoadFromString(CStringIOSource, 'stringio.pxs');
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-      if not LScript.Compile() then
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
+  begin
+    Section('Compile & JIT (opt level %d)', [LOptLevel]);
+    LEngine := gny_create();
+    try
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_set_dump_ir(LEngine, True);
+      gny_load_from_string(LEngine,
+        PAnsiChar(UTF8Encode(CStringIOSource)),
+        PAnsiChar(UTF8Encode('stringio.pxs')));
+
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      // Print SSA IR dump for debugging managed string cleanup
-//      TGnyUtils.PrintLn('--- SSA IR Dump (opt %d) ---', [LOrd]);
-//      TGnyUtils.PrintLn('%s', [LScript.GetSSADump()]);
-//      TGnyUtils.PrintLn('--- End SSA IR Dump ---', []);
-
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
       // Run print test (outputs to console)
-      TGnyUtils.PrintLn('--- Script output (opt %d) ---', [LOrd]);
-      LScript.Invoke('testPrint', []);
-      TGnyUtils.PrintLn('--- End script output ---', []);
-      Check(True, 'testPrint ran without crash (opt %d)', [LOrd]);
+      WriteLn('--- Script output (opt ', LOptLevel, ') ---');
+      gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('testPrint')), GNY_VT_VOID);
+      WriteLn('--- End script output ---');
+      Check(True, 'testPrint ran without crash (opt %d)', [LOptLevel]);
 
       // Test boolean logic (returns boolean — 1=true, 0=false as int8)
-      LResult := LScript.Invoke('testBool', [10, 5], gvtInt64).AsInt64;
-      Check(LResult = 1, 'testBool(10,5) = %d (expected true, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 10);
+      gny_arg_push_int32(LEngine, 5);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('testBool')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 1, 'testBool(10,5) = %d (expected true, opt %d)',
+        [LResult, LOptLevel]);
 
-      LResult := LScript.Invoke('testBool', [3, 7], gvtInt64).AsInt64;
-      Check(LResult = 0, 'testBool(3,7) = %d (expected false, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 3);
+      gny_arg_push_int32(LEngine, 7);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('testBool')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 0, 'testBool(3,7) = %d (expected false, opt %d)',
+        [LResult, LOptLevel]);
 
-      LResult := LScript.Invoke('testBool', [5, 5], gvtInt64).AsInt64;
-      Check(LResult = 0, 'testBool(5,5) = %d (expected false, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 5);
+      gny_arg_push_int32(LEngine, 5);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('testBool')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 0, 'testBool(5,5) = %d (expected false, opt %d)',
+        [LResult, LOptLevel]);
 
       // Test managed strings: concat, sharing, reassignment, comparison, +=
-      TGnyUtils.PrintLn('--- String output (opt %d) ---', [LOrd]);
-      LResult := LScript.Invoke('testStrings', [], gvtInt64).AsInt64;
-      TGnyUtils.PrintLn('--- End string output ---', []);
+      WriteLn('--- String output (opt ', LOptLevel, ') ---');
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('testStrings')), GNY_VT_INT64).AsInt64;
+      WriteLn('--- End string output ---');
 
       // Report heap leaks while backend is still alive
-      LScript.ReportLeaks();
+      gny_report_leaks(LEngine);
 
-      Check(LResult = 6, 'testStrings passed %d/6 (opt %d)', [LResult, LOrd]);
+      Check(LResult = 6, 'testStrings passed %d/6 (opt %d)',
+        [LResult, LOptLevel]);
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

@@ -1,15 +1,15 @@
 ﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
-        <ProjectGuid>{A594CC06-47D9-4083-93F4-EB7DE7B022D5}</ProjectGuid>
+        <ProjectGuid>{B2FD9108-B28A-49C8-97D3-39B6CD54023B}</ProjectGuid>
         <ProjectVersion>20.3</ProjectVersion>
         <FrameworkType>None</FrameworkType>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Release</Config>
         <Platform Condition="'$(Platform)'==''">Win64</Platform>
-        <ProjectName Condition="'$(ProjectName)'==''">Testbed</ProjectName>
+        <ProjectName Condition="'$(ProjectName)'==''">Ganymede</ProjectName>
         <TargetedPlatforms>2</TargetedPlatforms>
-        <AppType>Console</AppType>
-        <MainSource>Testbed.dpr</MainSource>
+        <AppType>Library</AppType>
+        <MainSource>Ganymede.dpr</MainSource>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
         <Base>true</Base>
@@ -60,32 +60,32 @@
         <DCC_S>false</DCC_S>
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
+        <GenDll>true</GenDll>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
-        <SanitizedProjectName>Testbed</SanitizedProjectName>
+        <SanitizedProjectName>Ganymede</SanitizedProjectName>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <DCC_UsePackage>vclwinx;DataSnapServer;fmx;emshosting;vclie;DbxCommonDriver;bindengine;IndyIPCommon;VCLRESTComponents;DBXMSSQLDriver;FireDACCommonODBC;emsclient;FireDACCommonDriver;appanalytics;IndyProtocols;vclx;Skia.Package.RTL;IndyIPClient;dbxcds;vcledge;bindcompvclwinx;emsedge;bindcompfmx;DBXFirebirdDriver;inetdb;FireDACSqliteDriver;DbxClientDriver;FireDACASADriver;soapmidas;vclactnband;fmxFireDAC;dbexpress;FireDACInfxDriver;DBXMySQLDriver;VclSmp;inet;DataSnapCommon;vcltouch;fmxase;DBXOdbcDriver;dbrtl;FireDACDBXDriver;Skia.Package.FMX;FireDACOracleDriver;fmxdae;FireDACMSAccDriver;CustomIPTransport;FireDACMSSQLDriver;DataSnapIndy10ServerTransport;DataSnapConnectors;vcldsnap;DBXInterBaseDriver;FireDACMongoDBDriver;IndySystem;FireDACTDataDriver;Skia.Package.VCL;vcldb;vclFireDAC;bindcomp;FireDACCommon;DataSnapServerMidas;FireDACODBCDriver;emsserverresource;inetstn;IndyCore;RESTBackendComponents;bindcompdbx;rtl;FireDACMySQLDriver;FireDACADSDriver;RESTComponents;DBXSqliteDriver;vcl;IndyIPServer;dsnapxml;dsnapcon;DataSnapClient;DataSnapProviderClient;adortl;DBXSybaseASEDriver;DBXDb2Driver;vclimg;DataSnapFireDAC;emsclientfiredac;FireDACPgDriver;FireDAC;FireDACDSDriver;inetdbxpress;xmlrtl;tethering;bindcompvcl;dsnap;CloudService;DBXSybaseASADriver;DBXOracleDriver;FireDACDb2Driver;DBXInformixDriver;fmxobj;bindcompvclsmp;DataSnapNativeClient;DatasnapConnectorsFreePascal;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
-        <DCC_ConsoleTarget>true</DCC_ConsoleTarget>
-        <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
-        <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>vclwinx;DataSnapServer;fmx;emshosting;vclie;DbxCommonDriver;bindengine;IndyIPCommon;VCLRESTComponents;DBXMSSQLDriver;FireDACCommonODBC;emsclient;FireDACCommonDriver;appanalytics;IndyProtocols;vclx;IndyIPClient;dbxcds;vcledge;bindcompvclwinx;emsedge;bindcompfmx;DBXFirebirdDriver;inetdb;FireDACSqliteDriver;DbxClientDriver;FireDACASADriver;soapmidas;vclactnband;fmxFireDAC;dbexpress;FireDACInfxDriver;DBXMySQLDriver;VclSmp;inet;DataSnapCommon;vcltouch;fmxase;DBXOdbcDriver;dbrtl;FireDACDBXDriver;FireDACOracleDriver;fmxdae;FireDACMSAccDriver;CustomIPTransport;FireDACMSSQLDriver;DataSnapIndy10ServerTransport;DataSnapConnectors;vcldsnap;DBXInterBaseDriver;FireDACMongoDBDriver;IndySystem;FireDACTDataDriver;Skia.Package.VCL;vcldb;vclFireDAC;bindcomp;FireDACCommon;DataSnapServerMidas;FireDACODBCDriver;emsserverresource;inetstn;IndyCore;RESTBackendComponents;bindcompdbx;rtl;FireDACMySQLDriver;FireDACADSDriver;RESTComponents;DBXSqliteDriver;vcl;IndyIPServer;dsnapxml;dsnapcon;DataSnapClient;DataSnapProviderClient;adortl;DBXSybaseASEDriver;DBXDb2Driver;vclimg;DataSnapFireDAC;emsclientfiredac;FireDACPgDriver;FireDAC;FireDACDSDriver;inetdbxpress;xmlrtl;tethering;bindcompvcl;dsnap;CloudService;DBXSybaseASADriver;DBXOracleDriver;FireDACDb2Driver;DBXInformixDriver;fmxobj;bindcompvclsmp;DataSnapNativeClient;DatasnapConnectorsFreePascal;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
-        <DCC_ConsoleTarget>true</DCC_ConsoleTarget>
-        <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
-        <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;$(DCC_Namespace)</DCC_Namespace>
         <BT_BuildType>Debug</BT_BuildType>
-        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Keys>CompanyName=tinyBigGAMES™ LLC;FileDescription=$(MSBuildProjectName);FileVersion=0.1.0.0;InternalName=Ganymede™ - Embeddable Native Scripting Engine;LegalCopyright=Copyright © 2026-present tinyBigGAMES™ LLC;LegalTrademarks=All Rights Reserved.;OriginalFilename=Ganymede.dll;ProgramID=com.tinybiggames.ganymede;ProductName=Ganymede™ - Embeddable Native Scripting Engine;ProductVersion=1.0.0.0;Comments=https://github.com/tinyBigGAMES/Ganymede</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
-        <DCC_ExeOutput>..\bin</DCC_ExeOutput>
-        <DCC_UnitSearchPath>..\src;..\..\..\Virtuoso\repo\src;..\lib\pascal;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
-        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
-        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
+        <DCC_ExeOutput>..\lib\bin</DCC_ExeOutput>
+        <DCC_UnitSearchPath>..\src;..\lib\src\pascal;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <Manifest_File>(None)</Manifest_File>
+        <AppDPIAwarenessMode>none</AppDPIAwarenessMode>
+        <VerInfo_MajorVer>0</VerInfo_MajorVer>
+        <VerInfo_MinorVer>1</VerInfo_MinorVer>
+        <VerInfo_DLL>true</VerInfo_DLL>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
@@ -101,7 +101,11 @@
         <DCC_RemoteDebug>false</DCC_RemoteDebug>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_Win64)'!=''">
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1033</VerInfo_Locale>
+        <VerInfo_MajorVer>0</VerInfo_MajorVer>
+        <VerInfo_MinorVer>1</VerInfo_MinorVer>
+        <VerInfo_DLL>true</VerInfo_DLL>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -110,55 +114,17 @@
         <DCC_DebugInformation>0</DCC_DebugInformation>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win64)'!=''">
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_MajorVer>0</VerInfo_MajorVer>
+        <VerInfo_MinorVer>1</VerInfo_MinorVer>
+        <VerInfo_DLL>true</VerInfo_DLL>
         <VerInfo_Locale>1033</VerInfo_Locale>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="..\src\Ganymede.ABI.pas"/>
         <DCCReference Include="..\src\Ganymede.Core.API.pas"/>
-        <DCCReference Include="..\src\Ganymede.Builders.pas"/>
-        <DCCReference Include="..\src\Ganymede.Codegen.pas"/>
-        <DCCReference Include="..\src\Ganymede.Config.pas"/>
-        <DCCReference Include="..\src\Ganymede.Emitter.pas"/>
-        <DCCReference Include="..\src\Ganymede.IR.pas"/>
-        <DCCReference Include="..\src\Ganymede.JIT.pas"/>
-        <DCCReference Include="..\src\Ganymede.Lexer.pas"/>
-        <DCCReference Include="..\src\Ganymede.Linker.pas"/>
-        <DCCReference Include="..\src\Ganymede.Native.pas"/>
-        <DCCReference Include="..\src\Ganymede.Parser.pas"/>
-        <DCCReference Include="..\src\Ganymede.Core.pas"/>
-        <DCCReference Include="..\src\Ganymede.Resources.pas"/>
-        <DCCReference Include="..\src\Ganymede.Runtime.pas"/>
-        <DCCReference Include="..\src\Ganymede.Semantics.pas"/>
-        <DCCReference Include="..\src\Ganymede.SSA.pas"/>
-        <DCCReference Include="..\src\Ganymede.TestCase.pas"/>
-        <DCCReference Include="..\src\Ganymede.TestDemo.pas"/>
-        <DCCReference Include="..\src\Ganymede.TOML.pas"/>
-        <DCCReference Include="..\src\Ganymede.Types.pas"/>
-        <DCCReference Include="..\src\Ganymede.Utils.pas"/>
-        <DCCReference Include="..\src\Ganymede.Debug.SourceMap.pas"/>
-        <DCCReference Include="UCommon.pas"/>
-        <DCCReference Include="UDemo.Performance.pas"/>
-        <DCCReference Include="UTest.Arrays.pas"/>
-        <DCCReference Include="UTest.ChoicesSets.pas"/>
-        <DCCReference Include="UTest.ConditionalComp.pas"/>
-        <DCCReference Include="UTest.Constants.pas"/>
-        <DCCReference Include="UTest.ControlFlow.pas"/>
-        <DCCReference Include="UTest.GetMem.pas"/>
-        <DCCReference Include="UTest.ImportClause.pas"/>
-        <DCCReference Include="UTest.ImportHost.pas"/>
-        <DCCReference Include="UTest.MatchStmt.pas"/>
-        <DCCReference Include="UTest.NumericOps.pas"/>
-        <DCCReference Include="UTest.Overlays.pas"/>
-        <DCCReference Include="UTest.Pointers.pas"/>
-        <DCCReference Include="UTest.Records.pas"/>
-        <DCCReference Include="UTest.RoutineTypes.pas"/>
-        <DCCReference Include="UTest.StringIO.pas"/>
-        <DCCReference Include="UTest.VarAssign.pas"/>
-        <DCCReference Include="UTest.VariadicArgs.pas"/>
-        <DCCReference Include="UTestbed.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -177,7 +143,7 @@
         <BorlandProject>
             <Delphi.Personality>
                 <Source>
-                    <Source Name="MainSource">Testbed.dpr</Source>
+                    <Source Name="MainSource">Ganymede.dpr</Source>
                 </Source>
                 <Excluded_Packages>
                     <Excluded_Packages Name="$(BDSBIN)\dcloffice2k290.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
@@ -200,27 +166,15 @@
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="..\bin\Testbed.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="..\lib\bin\Ganymede.dll" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win64">
-                        <RemoteName>Testbed.exe</RemoteName>
+                        <RemoteName>Ganymede.dll</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployFile LocalName="..\bin\Testbed.exe" Configuration="Release" Class="ProjectOutput">
-                    <Platform Name="Win64">
-                        <RemoteName>Testbed.exe</RemoteName>
-                        <Overwrite>true</Overwrite>
-                    </Platform>
-                </DeployFile>
-                <DeployFile LocalName="..\bin\Testbed.rsm" Configuration="Debug" Class="DebugSymbols">
-                    <Platform Name="Win64">
-                        <RemoteName>Testbed.rsm</RemoteName>
-                        <Overwrite>true</Overwrite>
-                    </Platform>
-                </DeployFile>
-                <DeployFile LocalName="Win32\Debug\Testbed.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="Win32\Debug\Ganymede.dll" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
-                        <RemoteName>Testbed.exe</RemoteName>
+                        <RemoteName>Ganymede.dll</RemoteName>
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>

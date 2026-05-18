@@ -88,3 +88,4 @@ checkpoint.yml
 checkpoint.zip
 checkpoint_base.zip
 distro.yml
+!lib/bin/Ganymede.dll

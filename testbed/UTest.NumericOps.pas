@@ -27,11 +27,9 @@ type
 implementation
 
 uses
-  System.SysUtils,
   System.Math,
-  Ganymede.Utils,
-  Ganymede.Native,
-  Ganymede.Core;
+  UCommon,
+  Ganymede;
 
 const
   CNumericSource =
@@ -91,53 +89,69 @@ end;
 
 procedure TScriptNumericOpsTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LIntResult: Int64;
   LFloatResult: Double;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
 begin
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Numeric Ops — opt level %d', [LOrd]);
-    LScript := TGanymede.Create();
-    try
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromString(CNumericSource, 'numops.pxs');
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-      if not LScript.Compile() then
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
+  begin
+    Section('Numeric Ops — opt level %d', [LOptLevel]);
+    LEngine := gny_create();
+    try
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_string(LEngine,
+        PAnsiChar(UTF8Encode(CNumericSource)),
+        PAnsiChar(UTF8Encode('numops.pxs')));
+
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
       // intops(10): div=3, mod=1, xor=15, shl=20, shr=2 → 41
-      LIntResult := LScript.Invoke('intops', [10], gvtInt64).AsInt64;
+      gny_arg_push_int32(LEngine, 10);
+      LIntResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('intops')), GNY_VT_INT64).AsInt64;
       Check(LIntResult = 41,
-        'intops(10) = %d (expected 41, opt %d)', [LIntResult, LOrd]);
+        'intops(10) = %d (expected 41, opt %d)', [LIntResult, LOptLevel]);
 
       // floatconst(): 10.5 + 3.0*2.0 - 1.5 = 15.0
-      LFloatResult := LScript.Invoke('floatconst', [], gvtFloat64).AsFloat64;
+      LFloatResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('floatconst')), GNY_VT_FLOAT64).AsFloat64;
       Check(SameValue(LFloatResult, 15.0, 0.001),
-        'floatconst() = %.4f (expected 15.0, opt %d)', [LFloatResult, LOrd]);
+        'floatconst() = %.4f (expected 15.0, opt %d)', [LFloatResult, LOptLevel]);
 
       // mixed(5): 5 * 2.5 + 1.0 = 13.5
-      LFloatResult := LScript.Invoke('mixed', [5], gvtFloat64).AsFloat64;
+      gny_arg_push_int32(LEngine, 5);
+      LFloatResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('mixed')), GNY_VT_FLOAT64).AsFloat64;
       Check(SameValue(LFloatResult, 13.5, 0.001),
-        'mixed(5) = %.4f (expected 13.5, opt %d)', [LFloatResult, LOrd]);
+        'mixed(5) = %.4f (expected 13.5, opt %d)', [LFloatResult, LOptLevel]);
 
       // slashdiv(7, 2): 7 / 2 = 3.5
-      LFloatResult := LScript.Invoke('slashdiv', [7, 2], gvtFloat64).AsFloat64;
+      gny_arg_push_int32(LEngine, 7);
+      gny_arg_push_int32(LEngine, 2);
+      LFloatResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('slashdiv')), GNY_VT_FLOAT64).AsFloat64;
       Check(SameValue(LFloatResult, 3.5, 0.001),
-        'slashdiv(7,2) = %.4f (expected 3.5, opt %d)', [LFloatResult, LOrd]);
+        'slashdiv(7,2) = %.4f (expected 3.5, opt %d)', [LFloatResult, LOptLevel]);
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

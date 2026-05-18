@@ -14,13 +14,7 @@ unit UTest.ChoicesSets;
 interface
 
 uses
-  System.SysUtils,
-  System.IOUtils,
-  Ganymede.Utils,
-  Ganymede.TestCase,
-  Ganymede.Core,
-  Ganymede.Native,
-  UCommon;
+  Ganymede.TestCase;
 
 type
   TScriptChoicesSetsTest = class(TGnyTestCase)
@@ -32,6 +26,10 @@ type
 
 implementation
 
+uses
+  System.IOUtils,
+  UCommon,
+  Ganymede;
 { TScriptChoicesSetsTest }
 
 constructor TScriptChoicesSetsTest.Create();
@@ -43,79 +41,65 @@ end;
 
 procedure TScriptChoicesSetsTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int32;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
   LFile: string;
 begin
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
+  begin
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
+
   LFile := TPath.Combine(CTestDir, 'test_mem_choices_sets.gny');
 
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Choices & Sets — opt level %d', [LOrd]);
-    LScript := TGanymede.Create();
+    Section('Choices & Sets — opt level %d', [LOptLevel]);
+    LEngine := gny_create();
     try
-      //LScript.SetDumpIR(True);
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromFile(LFile);
-
-      if not LScript.Compile() then
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_file(LEngine, PAnsiChar(UTF8Encode(LFile)));
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      //WriteLn(LScript.GetSSADump());
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('enumval')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 1, 'enumval() = %d (expected 1, opt %d)', [LResult, LOptLevel]);
 
-      // Enum — auto ordinal: green = 1
-      LResult := LScript.Invoke('enumval', [], gvtInt32).AsInt32;
-      Check(LResult = 1,
-        'enumval() = %d (expected 1, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('explicitval')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 10, 'explicitval() = %d (expected 10, opt %d)', [LResult, LOptLevel]);
 
-      // Enum — explicit ordinal: fail = 10
-      LResult := LScript.Invoke('explicitval', [], gvtInt32).AsInt32;
-      Check(LResult = 10,
-        'explicitval() = %d (expected 10, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('enumfirst')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 0, 'enumfirst() = %d (expected 0, opt %d)', [LResult, LOptLevel]);
 
-      // Enum — first: red = 0
-      LResult := LScript.Invoke('enumfirst', [], gvtInt32).AsInt32;
-      Check(LResult = 0,
-        'enumfirst() = %d (expected 0, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('enumlast')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 2, 'enumlast() = %d (expected 2, opt %d)', [LResult, LOptLevel]);
 
-      // Enum — last: blue = 2
-      LResult := LScript.Invoke('enumlast', [], gvtInt32).AsInt32;
-      Check(LResult = 2,
-        'enumlast() = %d (expected 2, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('setmember')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 1, 'setmember() = %d (expected 1, opt %d)', [LResult, LOptLevel]);
 
-      // Set — member present (7 in [1,3,5..10])
-      LResult := LScript.Invoke('setmember', [], gvtInt32).AsInt32;
-      Check(LResult = 1,
-        'setmember() = %d (expected 1, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('setnomember')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 0, 'setnomember() = %d (expected 0, opt %d)', [LResult, LOptLevel]);
 
-      // Set — member absent (2 not in [1,3,5..10])
-      LResult := LScript.Invoke('setnomember', [], gvtInt32).AsInt32;
-      Check(LResult = 0,
-        'setnomember() = %d (expected 0, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('setempty')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 0, 'setempty() = %d (expected 0, opt %d)', [LResult, LOptLevel]);
 
-      // Set — empty set (1 not in [])
-      LResult := LScript.Invoke('setempty', [], gvtInt32).AsInt32;
-      Check(LResult = 0,
-        'setempty() = %d (expected 0, opt %d)', [LResult, LOrd]);
-
-      // Set — boundary check (5 and 10 in [5..10], 4 not in)
-      LResult := LScript.Invoke('setboundary', [], gvtInt32).AsInt32;
-      Check(LResult = 1,
-        'setboundary() = %d (expected 1, opt %d)', [LResult, LOrd]);
+      LResult := gny_invoke(LEngine, PAnsiChar(UTF8Encode('setboundary')), GNY_VT_INT32).AsInt32;
+      Check(LResult = 1, 'setboundary() = %d (expected 1, opt %d)', [LResult, LOptLevel]);
 
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

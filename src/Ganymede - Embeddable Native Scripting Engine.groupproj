@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{58696E2A-F6A7-42BF-8813-E7495381DCEC}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="..\api\Ganymede.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="..\testbed\Testbed.dproj">
+            <Dependencies>..\api\Ganymede.dproj</Dependencies>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="Ganymede">
+        <MSBuild Projects="..\api\Ganymede.dproj"/>
+    </Target>
+    <Target Name="Ganymede:Clean">
+        <MSBuild Projects="..\api\Ganymede.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Ganymede:Make">
+        <MSBuild Projects="..\api\Ganymede.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Testbed" DependsOnTargets="Ganymede">
+        <MSBuild Projects="..\testbed\Testbed.dproj"/>
+    </Target>
+    <Target Name="Testbed:Clean" DependsOnTargets="Ganymede:Clean">
+        <MSBuild Projects="..\testbed\Testbed.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Testbed:Make" DependsOnTargets="Ganymede:Make">
+        <MSBuild Projects="..\testbed\Testbed.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="Ganymede;Testbed"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="Ganymede:Clean;Testbed:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="Ganymede:Make;Testbed:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

@@ -14,13 +14,7 @@ unit UTest.Arrays;
 interface
 
 uses
-  System.SysUtils,
-  System.IOUtils,
-  Ganymede.Utils,
-  Ganymede.TestCase,
-  Ganymede.Core,
-  Ganymede.Native,
-  UCommon;
+  Ganymede.TestCase;
 
 type
   TArraysTest = class(TGnyTestCase)
@@ -32,6 +26,10 @@ type
 
 implementation
 
+uses
+  System.IOUtils,
+  UCommon,
+  Ganymede;
 { TArraysTest }
 
 constructor TArraysTest.Create();
@@ -43,7 +41,7 @@ end;
 
 procedure TArraysTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LI8: Int8;
   LI16: Int16;
   LI32: Int32;
@@ -54,214 +52,146 @@ var
   LF32: Single;
   LF64: Double;
   LBool: Int8;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
   LFile: string;
 begin
-  LFile := TPath.Combine(CTestDir, 'test_mem_arrays.gny');
-
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Array Types — opt level %d', [LOrd]);
-    LScript := TGanymede.Create();
-    try
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromFile(LFile);
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-      if not LScript.Compile() then
+  LFile := TPath.Combine(CTestDir, 'test_mem_arrays.gny');
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
+  begin
+    Section('Array Types — opt level %d', [LOptLevel]);
+    LEngine := gny_create();
+    try
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_file(LEngine, PAnsiChar(UTF8Encode(LFile)));
+
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        //WriteLn(LScript.GetSSADump());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
       // --- int32 array, basic read/write ---
-      LI32 := LScript.Invoke('intarr', [], gvtInt32).AsInt32;
-      Check(LI32 = 60,
-        'intarr():int32 = %d (expected 60, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('intarr')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 60, 'intarr():int32 = %d (expected 60, opt %d)', [LI32, LOptLevel]);
 
-      // --- inline array type ---
-      LI32 := LScript.Invoke('inlinearr', [], gvtInt32).AsInt32;
-      Check(LI32 = 600,
-        'inlinearr():int32 = %d (expected 600, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('inlinearr')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 600, 'inlinearr():int32 = %d (expected 600, opt %d)', [LI32, LOptLevel]);
 
-      // --- int8 array ---
-      LI8 := LScript.Invoke('i8arr', [], gvtInt8).AsInt8;
-      Check(LI8 = 50,
-        'i8arr():int8 = %d (expected 50, opt %d)', [LI8, LOrd]);
+      LI8 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('i8arr')), GNY_VT_INT8).AsInt8;
+      Check(LI8 = 50, 'i8arr():int8 = %d (expected 50, opt %d)', [LI8, LOptLevel]);
 
-      // --- int16 array ---
-      LI16 := LScript.Invoke('i16arr', [], gvtInt16).AsInt16;
-      Check(LI16 = 5000,
-        'i16arr():int16 = %d (expected 5000, opt %d)', [LI16, LOrd]);
+      LI16 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('i16arr')), GNY_VT_INT16).AsInt16;
+      Check(LI16 = 5000, 'i16arr():int16 = %d (expected 5000, opt %d)', [LI16, LOptLevel]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('i64arr')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 4000000000, 'i64arr():int64 = %d (expected 4000000000, opt %d)', [LI64, LOptLevel]);
 
-      // --- int64 array ---
-      LI64 := LScript.Invoke('i64arr', [], gvtInt64).AsInt64;
-      Check(LI64 = 4000000000,
-        'i64arr():int64 = %d (expected 4000000000, opt %d)', [LI64, LOrd]);
+      LU8 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('u8arr')), GNY_VT_UINT8).AsUInt8;
+      Check(LU8 = 250, 'u8arr():uint8 = %d (expected 250, opt %d)', [LU8, LOptLevel]);
 
-      // --- uint8 array ---
-      LU8 := LScript.Invoke('u8arr', [], gvtUInt8).AsUInt8;
-      Check(LU8 = 250,
-        'u8arr():uint8 = %d (expected 250, opt %d)', [LU8, LOrd]);
+      LU16 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('u16arr')), GNY_VT_UINT16).AsUInt16;
+      Check(LU16 = 50000, 'u16arr():uint16 = %d (expected 50000, opt %d)', [LU16, LOptLevel]);
 
-      // --- uint16 array ---
-      LU16 := LScript.Invoke('u16arr', [], gvtUInt16).AsUInt16;
-      Check(LU16 = 50000,
-        'u16arr():uint16 = %d (expected 50000, opt %d)', [LU16, LOrd]);
+      LU32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('u32arr')), GNY_VT_UINT32).AsUInt32;
+      Check(LU32 = 400000, 'u32arr():uint32 = %d (expected 400000, opt %d)', [LU32, LOptLevel]);
 
-      // --- uint32 array ---
-      LU32 := LScript.Invoke('u32arr', [], gvtUInt32).AsUInt32;
-      Check(LU32 = 400000,
-        'u32arr():uint32 = %d (expected 400000, opt %d)', [LU32, LOrd]);
+      LF32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('f32arr')), GNY_VT_FLOAT32).AsFloat32;
+      Check(Abs(LF32 - 5.0) < 0.01, 'f32arr():float32 = %.4f (expected 5.0, opt %d)', [LF32, LOptLevel]);
 
-      // --- float32 array ---
-      LF32 := LScript.Invoke('f32arr', [], gvtFloat32).AsFloat32;
-      Check(Abs(LF32 - 5.0) < 0.01,
-        'f32arr():float32 = %.4f (expected 5.0, opt %d)', [LF32, LOrd]);
+      LF64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('f64arr')), GNY_VT_FLOAT64).AsFloat64;
+      Check(Abs(LF64 - 30.75) < 0.001, 'f64arr():float64 = %.4f (expected 30.75, opt %d)', [LF64, LOptLevel]);
 
-      // --- float64 array ---
-      LF64 := LScript.Invoke('f64arr', [], gvtFloat64).AsFloat64;
-      Check(Abs(LF64 - 30.75) < 0.001,
-        'f64arr():float64 = %.4f (expected 30.75, opt %d)', [LF64, LOrd]);
+      LBool := gny_invoke(LEngine, PAnsiChar(UTF8Encode('boolarr')), GNY_VT_INT8).AsInt8;
+      Check(LBool = 1, 'boolarr():bool = %d (expected 1/true, opt %d)', [LBool, LOptLevel]);
 
-      // --- boolean array ---
-      LBool := LScript.Invoke('boolarr', [], gvtInt8).AsInt8;
-      Check(LBool = 1,
-        'boolarr():bool = %d (expected 1/true, opt %d)', [LBool, LOrd]);
+      LBool := gny_invoke(LEngine, PAnsiChar(UTF8Encode('boolarrfalse')), GNY_VT_INT8).AsInt8;
+      Check(LBool = 0, 'boolarrfalse():bool = %d (expected 0/false, opt %d)', [LBool, LOptLevel]);
 
-      LBool := LScript.Invoke('boolarrfalse', [], gvtInt8).AsInt8;
-      Check(LBool = 0,
-        'boolarrfalse():bool = %d (expected 0/false, opt %d)', [LBool, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('elemmath')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 590, 'elemmath():int32 = %d (expected 590, opt %d)', [LI32, LOptLevel]);
 
-      // --- element arithmetic ---
-      LI32 := LScript.Invoke('elemmath', [], gvtInt32).AsInt32;
-      Check(LI32 = 590,
-        'elemmath():int32 = %d (expected 590, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('loopsum')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 550, 'loopsum():int32 = %d (expected 550, opt %d)', [LI32, LOptLevel]);
 
-      // --- loop fill + sum ---
-      LI32 := LScript.Invoke('loopsum', [], gvtInt32).AsInt32;
-      Check(LI32 = 550,
-        'loopsum():int32 = %d (expected 550, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('overwrite')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 1999, 'overwrite():int32 = %d (expected 1999, opt %d)', [LI32, LOptLevel]);
 
-      // --- element overwrite ---
-      LI32 := LScript.Invoke('overwrite', [], gvtInt32).AsInt32;
-      Check(LI32 = 1999,
-        'overwrite():int32 = %d (expected 1999, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('boundary')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 100, 'boundary():int32 = %d (expected 100, opt %d)', [LI32, LOptLevel]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('multiarray')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 300, 'multiarray():int64 = %d (expected 300, opt %d)', [LI64, LOptLevel]);
 
-      // --- boundary access ---
-      LI32 := LScript.Invoke('boundary', [], gvtInt32).AsInt32;
-      Check(LI32 = 100,
-        'boundary():int32 = %d (expected 100, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('elemarg')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 100, 'elemarg():int32 = %d (expected 100, opt %d)', [LI32, LOptLevel]);
 
-      // --- multiple array vars ---
-      LI64 := LScript.Invoke('multiarray', [], gvtInt64).AsInt64;
-      Check(LI64 = 300,
-        'multiarray():int64 = %d (expected 300, opt %d)', [LI64, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('recarr')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 121, 'recarr():int32 = %d (expected 121, opt %d)', [LI32, LOptLevel]);
 
-      // --- element as function arg ---
-      LI32 := LScript.Invoke('elemarg', [], gvtInt32).AsInt32;
-      Check(LI32 = 100,
-        'elemarg():int32 = %d (expected 100, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('condelem')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 10, 'condelem():int32 = %d (expected 10, opt %d)', [LI32, LOptLevel]);
 
-      // --- array of records ---
-      LI32 := LScript.Invoke('recarr', [], gvtInt32).AsInt32;
-      Check(LI32 = 121,
-        'recarr():int32 = %d (expected 121, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('arrcopy')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 99, 'arrcopy():int32 = %d (expected 99, opt %d)', [LI32, LOptLevel]);
 
-      // --- conditional on array element ---
-      LI32 := LScript.Invoke('condelem', [], gvtInt32).AsInt32;
-      Check(LI32 = 10,
-        'condelem():int32 = %d (expected 10, opt %d)', [LI32, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('kitchensink')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 28, 'kitchensink():int64 = %d (expected 28, opt %d)', [LI64, LOptLevel]);
+      // --- dynamic arrays ---
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_basic')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 150, 'dynarr_basic():int32 = %d (expected 150, opt %d)', [LI32, LOptLevel]);
 
-      // --- array copy via loop ---
-      LI32 := LScript.Invoke('arrcopy', [], gvtInt32).AsInt32;
-      Check(LI32 = 99,
-        'arrcopy():int32 = %d (expected 99, opt %d)', [LI32, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_len')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 10, 'dynarr_len():int64 = %d (expected 10, opt %d)', [LI64, LOptLevel]);
 
-      // --- kitchen sink: all integer types ---
-      LI64 := LScript.Invoke('kitchensink', [], gvtInt64).AsInt64;
-      Check(LI64 = 28,
-        'kitchensink():int64 = %d (expected 28, opt %d)', [LI64, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_len_nil')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 0, 'dynarr_len_nil():int64 = %d (expected 0, opt %d)', [LI64, LOptLevel]);
 
-      // --- dynamic array: basic setlength + read/write ---
-      LI32 := LScript.Invoke('dynarr_basic', [], gvtInt32).AsInt32;
-      Check(LI32 = 150,
-        'dynarr_basic():int32 = %d (expected 150, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_loopsum')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 550, 'dynarr_loopsum():int32 = %d (expected 550, opt %d)', [LI32, LOptLevel]);
 
-      // --- dynamic array: len() intrinsic ---
-      LI64 := LScript.Invoke('dynarr_len', [], gvtInt64).AsInt64;
-      Check(LI64 = 10,
-        'dynarr_len():int64 = %d (expected 10, opt %d)', [LI64, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_i64')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 4000000000, 'dynarr_i64():int64 = %d (expected 4000000000, opt %d)', [LI64, LOptLevel]);
 
-      // --- dynamic array: len() on nil (before setlength) ---
-      LI64 := LScript.Invoke('dynarr_len_nil', [], gvtInt64).AsInt64;
-      Check(LI64 = 0,
-        'dynarr_len_nil():int64 = %d (expected 0, opt %d)', [LI64, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_overwrite')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 1999, 'dynarr_overwrite():int32 = %d (expected 1999, opt %d)', [LI32, LOptLevel]);
 
-      // --- dynamic array: loop fill + sum ---
-      LI32 := LScript.Invoke('dynarr_loopsum', [], gvtInt32).AsInt32;
-      Check(LI32 = 550,
-        'dynarr_loopsum():int32 = %d (expected 550, opt %d)', [LI32, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_expr_len')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 5, 'dynarr_expr_len():int64 = %d (expected 5, opt %d)', [LI64, LOptLevel]);
 
-      // --- dynamic array: int64 elements ---
-      LI64 := LScript.Invoke('dynarr_i64', [], gvtInt64).AsInt64;
-      Check(LI64 = 4000000000,
-        'dynarr_i64():int64 = %d (expected 4000000000, opt %d)', [LI64, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_i8')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 40, 'dynarr_i8():int32 = %d (expected 40, opt %d)', [LI32, LOptLevel]);
+      LF64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_f64')), GNY_VT_FLOAT64).AsFloat64;
+      Check(Abs(LF64 - 41.0) < 0.001, 'dynarr_f64():float64 = %.4f (expected 41.0, opt %d)', [LF64, LOptLevel]);
 
-      // --- dynamic array: element overwrite ---
-      LI32 := LScript.Invoke('dynarr_overwrite', [], gvtInt32).AsInt32;
-      Check(LI32 = 1999,
-        'dynarr_overwrite():int32 = %d (expected 1999, opt %d)', [LI32, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_multi')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 3300, 'dynarr_multi():int64 = %d (expected 3300, opt %d)', [LI64, LOptLevel]);
 
-      // --- dynamic array: setlength with expression ---
-      LI64 := LScript.Invoke('dynarr_expr_len', [], gvtInt64).AsInt64;
-      Check(LI64 = 5,
-        'dynarr_expr_len():int64 = %d (expected 5, opt %d)', [LI64, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_elemmath')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 590, 'dynarr_elemmath():int32 = %d (expected 590, opt %d)', [LI32, LOptLevel]);
 
-      // --- dynamic array: int8 elements ---
-      LI32 := LScript.Invoke('dynarr_i8', [], gvtInt32).AsInt32;
-      Check(LI32 = 40,
-        'dynarr_i8():int32 = %d (expected 40, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_elemarg')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 100, 'dynarr_elemarg():int32 = %d (expected 100, opt %d)', [LI32, LOptLevel]);
 
-      // --- dynamic array: float64 elements ---
-      LF64 := LScript.Invoke('dynarr_f64', [], gvtFloat64).AsFloat64;
-      Check(Abs(LF64 - 41.0) < 0.001,
-        'dynarr_f64():float64 = %.4f (expected 41.0, opt %d)', [LF64, LOrd]);
-
-      // --- dynamic array: multiple arrays ---
-      LI64 := LScript.Invoke('dynarr_multi', [], gvtInt64).AsInt64;
-      Check(LI64 = 3300,
-        'dynarr_multi():int64 = %d (expected 3300, opt %d)', [LI64, LOrd]);
-
-      // --- dynamic array: element arithmetic ---
-      LI32 := LScript.Invoke('dynarr_elemmath', [], gvtInt32).AsInt32;
-      Check(LI32 = 590,
-        'dynarr_elemmath():int32 = %d (expected 590, opt %d)', [LI32, LOrd]);
-
-      // --- dynamic array: element as function arg ---
-      LI32 := LScript.Invoke('dynarr_elemarg', [], gvtInt32).AsInt32;
-      Check(LI32 = 100,
-        'dynarr_elemarg():int32 = %d (expected 100, opt %d)', [LI32, LOrd]);
-
-      // --- dynamic array: conditional on element ---
-      LI32 := LScript.Invoke('dynarr_condelem', [], gvtInt32).AsInt32;
-      Check(LI32 = 10,
-        'dynarr_condelem():int32 = %d (expected 10, opt %d)', [LI32, LOrd]);
+      LI32 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('dynarr_condelem')), GNY_VT_INT32).AsInt32;
+      Check(LI32 = 10, 'dynarr_condelem():int32 = %d (expected 10, opt %d)', [LI32, LOptLevel]);
 
       // --- len() on managed string ---
-      LI64 := LScript.Invoke('len_string', [], gvtInt64).AsInt64;
-      Check(LI64 = 5,
-        'len_string():int64 = %d (expected 5, opt %d)', [LI64, LOrd]);
+      LI64 := gny_invoke(LEngine, PAnsiChar(UTF8Encode('len_string')), GNY_VT_INT64).AsInt64;
+      Check(LI64 = 5, 'len_string():int64 = %d (expected 5, opt %d)', [LI64, LOptLevel]);
 
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
+
+  gny_unload();
 end;
 
 end.

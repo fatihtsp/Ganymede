@@ -27,10 +27,8 @@ type
 implementation
 
 uses
-  System.SysUtils,
-  Ganymede.Utils,
-  Ganymede.Native,
-  Ganymede.Core;
+  UCommon,
+  Ganymede;
 
 const
   CConstSource =
@@ -80,64 +78,85 @@ end;
 
 procedure TScriptConstantsTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int64;
   LCompute: TComputeFunc;
-  LOptLevel: TGnyOptLevel;
-  LOrd: Integer;
+  LOptLevel: Integer;
 begin
-  // --- Test 1: Constants used in arithmetic ---
-  for LOptLevel := Low(TGnyOptLevel) to High(TGnyOptLevel) do
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
   begin
-    LOrd := Ord(LOptLevel);
-    Section('Constants — Compile & JIT (opt level %d)', [LOrd]);
-    LScript := TGanymede.Create();
-    try
-      LScript.SetOptimizationLevel(LOptLevel);
-      LScript.LoadFromString(CConstSource, 'consttest.pxs');
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-      if not LScript.Compile() then
+  // --- Test 1: Constants used in arithmetic ---
+  for LOptLevel := GNY_OPT_NONE to GNY_OPT_FULL do
+  begin
+    Section('Constants — Compile & JIT (opt level %d)', [LOptLevel]);
+    LEngine := gny_create();
+    try
+      gny_set_optimization_level(LEngine, LOptLevel);
+      gny_load_from_string(LEngine,
+        PAnsiChar(UTF8Encode(CConstSource)),
+        PAnsiChar(UTF8Encode('consttest.pxs')));
+
+      if not gny_compile(LEngine) then
       begin
-        FlushErrors(LScript.GetErrors());
-        Check(False, 'Compile failed (opt %d)', [LOrd]);
+        gny_print_errors(LEngine);
+        Check(False, 'Compile failed (opt %d)', [LOptLevel]);
         Continue;
       end;
 
-      Check(True, 'Compiled successfully (opt %d)', [LOrd]);
+      Check(True, 'Compiled successfully (opt %d)', [LOptLevel]);
 
       // compute(5) = 100 + 5*3 = 115
-      LResult := LScript.Invoke('compute', [5], gvtInt64).AsInt64;
-      Check(LResult = 115, 'compute(5) = %d (expected 115, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 5);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('compute')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 115, 'compute(5) = %d (expected 115, opt %d)',
+        [LResult, LOptLevel]);
 
-      LCompute := LScript.GetSymbol('compute');
+      LCompute := gny_get_symbol(LEngine,
+        PAnsiChar(UTF8Encode('compute')));
       LResult := LCompute(5);
-      Check(LResult = 115, 'direct compute(5) = %d (expected 115, opt %d)', [LResult, LOrd]);
+      Check(LResult = 115, 'direct compute(5) = %d (expected 115, opt %d)',
+        [LResult, LOptLevel]);
 
       // compute(0) = 100 + 0*3 = 100
-      LResult := LScript.Invoke('compute', [0], gvtInt64).AsInt64;
-      Check(LResult = 100, 'compute(0) = %d (expected 100, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, 0);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('compute')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 100, 'compute(0) = %d (expected 100, opt %d)',
+        [LResult, LOptLevel]);
 
       // compute(-10) = 100 + (-10)*3 = 70
-      LResult := LScript.Invoke('compute', [-10], gvtInt64).AsInt64;
-      Check(LResult = 70, 'compute(-10) = %d (expected 70, opt %d)', [LResult, LOrd]);
+      gny_arg_push_int32(LEngine, -10);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('compute')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 70, 'compute(-10) = %d (expected 70, opt %d)',
+        [LResult, LOptLevel]);
     finally
-      LScript.Free();
+      gny_destroy(LEngine);
     end;
   end;
 
   // --- Test 2: Assignment to const must fail ---
   Section('Constants — Immutability check');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript.LoadFromString(CConstAssignSource, 'constassign.pxs');
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(CConstAssignSource)),
+      PAnsiChar(UTF8Encode('constassign.pxs')));
 
-    if LScript.Compile() then
+    if gny_compile(LEngine) then
       Check(False, 'Compile should have failed (assignment to const)')
     else
       Check(True, 'Correctly rejected assignment to constant');
   finally
-    LScript.Free();
+    gny_destroy(LEngine);
   end;
+
+  gny_unload();
 end;
 
 end.

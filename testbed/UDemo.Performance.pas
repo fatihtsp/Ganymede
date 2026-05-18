@@ -20,10 +20,8 @@ implementation
 uses
   System.SysUtils,
   System.Diagnostics,
-  Ganymede.Utils,
-  Ganymede.Native,
-  Ganymede.Core,
-  UCommon;
+  UCommon,
+  Ganymede;
 
 const
   FIB_N = 30;
@@ -39,7 +37,6 @@ begin
   else
     Result := NativeFib(AN - 1) + NativeFib(AN - 2);
 end;
-
 function BenchNative(): Double;
 var
   LSW: TStopwatch;
@@ -53,50 +50,7 @@ begin
 end;
 
 { -------------------------------------------------------------------------- }
-{  Native JIT fib — x64 codegen via TGnyNativeBackend fluent API              }
-{ -------------------------------------------------------------------------- }
-
-function BenchNativeJIT(): Double;
-var
-  LNative: TGnyNativeBackend;
-  LJIT: TGnyJIT;
-  LSW: TStopwatch;
-  LResult: Int64;
-begin
-  LNative := TGnyNativeBackend.Create();
-  try
-    LNative.SetOptimizationLevel(2);
-
-    // Define fib as a recursive function
-    LNative.Func('fib', gvtInt64, False, plDefault, True)
-      .Arg('n', gvtInt64)
-      .When(LNative.Lt(LNative.Get('n'), LNative.Int64(2)))
-        .Ret(LNative.Get('n'))
-      .EndWhen()
-      .Ret(LNative.Add(
-        LNative.Invoke('fib', [LNative.Sub(LNative.Get('n'), LNative.Int64(1))]),
-        LNative.Invoke('fib', [LNative.Sub(LNative.Get('n'), LNative.Int64(2))])))
-    .EndFunc();
-
-    // JIT compile
-    LJIT := LNative.BuildJIT();
-    try
-      // Benchmark the JIT execution
-      LSW := TStopwatch.StartNew();
-      LResult := LJIT.Invoke('fib', [FIB_N]);
-      LSW.Stop();
-      Result := LSW.Elapsed.TotalMilliseconds;
-      Assert(LResult = 832040);
-    finally
-      LJIT.Free();
-    end;
-  finally
-    LNative.Free();
-  end;
-end;
-
-{ -------------------------------------------------------------------------- }
-{  PxlScript Frontend JIT fib — source → lex → parse → emit → JIT           }
+{  Script JIT fib — source → compile → JIT via DLL API                      }
 { -------------------------------------------------------------------------- }
 
 type
@@ -104,7 +58,7 @@ type
 
 function BenchScriptJIT(var ADirectMs: Double): Double;
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LSW: TStopwatch;
   LResult: Int64;
   LFib: TFibFunc;
@@ -123,40 +77,42 @@ const
   end;
 
   end.
-  ''';
-begin
+  ''';begin
   ADirectMs := -1;
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript.SetOptimizationLevel(olFull);
-    LScript.LoadFromString(CFibSource, 'fibonacci.pxl');
-    if not LScript.Compile() then
+    gny_set_optimization_level(LEngine, GNY_OPT_FULL);
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(CFibSource)),
+      PAnsiChar(UTF8Encode('fibonacci.pxl')));
+    if not gny_compile(LEngine) then
     begin
-      TGnyUtils.PrintLn(COLOR_RED + '  Script compilation failed!');
-      TGnyUtils.PrintLn(COLOR_RED + '  %s', [LScript.GetErrors().ToString()]);
+      WriteLn('  Script compilation failed!');
+      gny_print_errors(LEngine);
       Result := -1;
       Exit;
     end;
 
     // Benchmark via Invoke (string lookup + arg boxing)
     LSW := TStopwatch.StartNew();
-    LResult := LScript.Invoke('fib', [FIB_N], gvtInt64).AsInt64;
+    gny_arg_push_int64(LEngine, FIB_N);
+    LResult := gny_invoke(LEngine,
+      PAnsiChar(UTF8Encode('fib')), GNY_VT_INT64).AsInt64;
     LSW.Stop();
     Result := LSW.Elapsed.TotalMilliseconds;
     Assert(LResult = 832040);
 
     // Benchmark via direct function pointer (zero overhead)
-    LFib := LScript.GetSymbol('fib');
+    LFib := gny_get_symbol(LEngine, PAnsiChar(UTF8Encode('fib')));
     LSW := TStopwatch.StartNew();
     LDirectResult := LFib(FIB_N);
     LSW.Stop();
     ADirectMs := LSW.Elapsed.TotalMilliseconds;
     Assert(LDirectResult = 832040);
   finally
-    LScript.Free();
+    gny_destroy(LEngine);
   end;
 end;
-
 { -------------------------------------------------------------------------- }
 {  Main                                                                      }
 { -------------------------------------------------------------------------- }
@@ -167,37 +123,41 @@ var
   LScriptMs: Double;
   LDirectMs: Double;
 begin
-  TGnyUtils.PrintLn(COLOR_CYAN + '  Ganymede™ Native JIT — fib(%d) Benchmark', [FIB_N]);
-  TGnyUtils.PrintLn(COLOR_CYAN + '  =========================================================');
-  TGnyUtils.PrintLn('');
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
+  begin
+    WriteLn('  Failed to load Ganymede DLL');
+    Exit;
+  end;
 
-  TGnyUtils.PrintLn(COLOR_WHITE + '  Running native Delphi...');
+  WriteLn('  Ganymede Native JIT — fib(', FIB_N, ') Benchmark');
+  WriteLn('  =========================================================');
+  WriteLn('');
+
+  WriteLn('  Running native Delphi...');
   LNativeMs := BenchNative();
 
-  //TGnyUtils.PrintLn(COLOR_WHITE + '  Running native JIT...');
-  //LJITMs := BenchNativeJIT();
-
-  TGnyUtils.PrintLn(COLOR_WHITE + '  Running Native Script...');
+  WriteLn('  Running Native Script...');
   LScriptMs := BenchScriptJIT(LDirectMs);
 
-  TGnyUtils.PrintLn('');
-  TGnyUtils.PrintLn(COLOR_CYAN + '  Results (fib(%d) = 832040)', [FIB_N]);
-  TGnyUtils.PrintLn(COLOR_CYAN + '  ---------------------------------------------------------');
-  TGnyUtils.PrintLn(COLOR_WHITE + '  %-24s %10s %8s', ['Implementation', 'Time (ms)', 'Ratio']);
-  TGnyUtils.PrintLn(COLOR_WHITE + '  %-24s %10s %8s', ['------------------------', '----------', '--------']);
-  TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native Delphi', LNativeMs, 1.0]);
-  //TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native JIT', LJITMs, LJITMs / LNativeMs]);
+  WriteLn('');
+  WriteLn(Format('  Results (fib(%d) = 832040)', [FIB_N]));
+  WriteLn('  ---------------------------------------------------------');
+  WriteLn(Format('  %-24s %10s %8s', ['Implementation', 'Time (ms)', 'Ratio']));
+  WriteLn(Format('  %-24s %10s %8s', ['------------------------', '----------', '--------']));
+  WriteLn(Format('  %-24s %10.1f %7.1fx', ['Native Delphi', LNativeMs, 1.0]));
   if LScriptMs >= 0 then
   begin
-    TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native Script (Invoke)', LScriptMs, LScriptMs / LNativeMs]);
-    TGnyUtils.PrintLn(COLOR_GREEN + '  %-24s %10.1f %7.1fx', ['Native Sript (Direct)', LDirectMs, LDirectMs / LNativeMs]);
+    WriteLn(Format('  %-24s %10.1f %7.1fx', ['Native Script (Invoke)', LScriptMs, LScriptMs / LNativeMs]));
+    WriteLn(Format('  %-24s %10.1f %7.1fx', ['Native Script (Direct)', LDirectMs, LDirectMs / LNativeMs]));
   end
   else
-    TGnyUtils.PrintLn(COLOR_RED + '  %-24s %10s %8s', ['PxlScript JIT', 'FAILED', 'N/A']);
-  TGnyUtils.PrintLn(COLOR_WHITE + '  %-24s %10s %8s', ['------------------------', '----------', '--------']);
-  TGnyUtils.PrintLn('');
+    WriteLn(Format('  %-24s %10s %8s', ['Script JIT', 'FAILED', 'N/A']));
+  WriteLn(Format('  %-24s %10s %8s', ['------------------------', '----------', '--------']));
+  WriteLn('');
 
   PrintBenchmarkReference();
+
+  gny_unload();
 end;
 
 end.

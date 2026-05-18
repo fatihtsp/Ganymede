@@ -14,11 +14,7 @@ unit UTest.ImportHost;
 interface
 
 uses
-  System.SysUtils,
-  Ganymede.Utils,
-  Ganymede.TestCase,
-  Ganymede.Core,
-  Ganymede.Native;
+  Ganymede.TestCase;
 
 type
   { TScriptImportHostTest }
@@ -30,6 +26,10 @@ type
   end;
 
 implementation
+
+uses
+  UCommon,
+  Ganymede;
 
 // Host functions for testing — called from JIT'd script code
 
@@ -61,6 +61,11 @@ begin
   Result := GHostCallCount;
 end;
 
+const
+  // Param type arrays for gny_import_host
+  CParamsInt64x2: array[0..1] of Integer = (GNY_VT_INT64, GNY_VT_INT64);
+  CParamsInt64x1: array[0..0] of Integer = (GNY_VT_INT64);
+
 { TScriptImportHostTest }
 
 constructor TScriptImportHostTest.Create();
@@ -72,7 +77,7 @@ end;
 
 procedure TScriptImportHostTest.Run();
 var
-  LScript: TGanymede;
+  LEngine: TGnyEngine;
   LResult: Int64;
 const
 
@@ -88,7 +93,6 @@ const
 
   end.
   ''';
-
   // Test 2: Nested host calls
   CNestedSource =
   '''
@@ -117,94 +121,106 @@ const
 
   end.
   ''';
-
 begin
+  if not gny_load(PAnsiChar(UTF8Encode(CDllPath))) then
+  begin
+    Check(False, 'Failed to load Ganymede DLL');
+    Exit;
+  end;
+
   //--- Test 1: Simple host call with args and return --------------------------
   Section('Simple host call — host_add(10, 20)');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript.ImportHost('host_add', @host_add,
-      [gvtInt64, gvtInt64], gvtInt64);
-    LScript.LoadFromString(CAddSource, 'test_add.pxs');
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_add')),
+      @host_add, @CParamsInt64x2[0], 2, GNY_VT_INT64, GNY_LINK_DEFAULT);
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(CAddSource)),
+      PAnsiChar(UTF8Encode('test_add.pxs')));
 
-    if not LScript.Compile() then
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled successfully');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'host_add(10, 20) = %d (expected 30)', [LResult]);
     end;
   finally
-    LScript.Free();
+    gny_destroy(LEngine);
   end;
-
   //--- Test 2: Nested host calls ----------------------------------------------
   Section('Nested host calls — host_add(host_mul(3, 4), host_negate(5))');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript.ImportHost('host_add', @host_add,
-      [gvtInt64, gvtInt64], gvtInt64);
-    LScript.ImportHost('host_mul', @host_mul,
-      [gvtInt64, gvtInt64], gvtInt64);
-    LScript.ImportHost('host_negate', @host_negate,
-      [gvtInt64], gvtInt64);
-    LScript.LoadFromString(CNestedSource, 'test_nested.pxs');
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_add')),
+      @host_add, @CParamsInt64x2[0], 2, GNY_VT_INT64, GNY_LINK_DEFAULT);
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_mul')),
+      @host_mul, @CParamsInt64x2[0], 2, GNY_VT_INT64, GNY_LINK_DEFAULT);
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_negate')),
+      @host_negate, @CParamsInt64x1[0], 1, GNY_VT_INT64, GNY_LINK_DEFAULT);
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(CNestedSource)),
+      PAnsiChar(UTF8Encode('test_nested.pxs')));
 
-    if not LScript.Compile() then
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled successfully');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
-      Check(LResult = 7, 'host_add(host_mul(3,4), host_negate(5)) = %d (expected 7)',
-        [LResult]);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 7,
+        'host_add(host_mul(3,4), host_negate(5)) = %d (expected 7)', [LResult]);
     end;
   finally
-    LScript.Free();
+    gny_destroy(LEngine);
   end;
-
   //--- Test 3: Void host calls (side effects) ---------------------------------
   Section('Void host calls — counter increment');
   GHostCallCount := 0;
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript.ImportHost('host_increment_counter',
-      @host_increment_counter, []);
-    LScript.ImportHost('host_get_counter',
-      @host_get_counter, [], gvtInt64);
-    LScript.LoadFromString(CCounterSource, 'test_counter.pxs');
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_increment_counter')),
+      @host_increment_counter, nil, 0, GNY_VT_VOID, GNY_LINK_DEFAULT);
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_get_counter')),
+      @host_get_counter, nil, 0, GNY_VT_INT64, GNY_LINK_DEFAULT);
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(CCounterSource)),
+      PAnsiChar(UTF8Encode('test_counter.pxs')));
 
-    if not LScript.Compile() then
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Compile failed');
     end
     else
     begin
       Check(True, 'Compiled successfully');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 3, 'Counter after 3 increments = %d (expected 3)', [LResult]);
     end;
   finally
-    LScript.Free();
+    gny_destroy(LEngine);
   end;
-
   //--- Test 4: Recompilation on same instance ---------------------------------
   Section('Recompile — same instance, different source');
-  LScript := TGanymede.Create();
+  LEngine := gny_create();
   try
-    LScript.ImportHost('host_add', @host_add,
-      [gvtInt64, gvtInt64], gvtInt64);
+    gny_import_host(LEngine, PAnsiChar(UTF8Encode('host_add')),
+      @host_add, @CParamsInt64x2[0], 2, GNY_VT_INT64, GNY_LINK_DEFAULT);
 
     // First compile: 10 + 20 = 30
-    LScript.LoadFromString(
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(
       '''
       module mem test_recomp1;
       public routine main(): int64;
@@ -212,22 +228,24 @@ begin
         return host_add(10, 20);
       end;
       end.
-      ''', 'recomp1.pxs');
+      ''')),
+      PAnsiChar(UTF8Encode('recomp1.pxs')));
 
-    if not LScript.Compile() then
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'First compile failed');
     end
     else
     begin
       Check(True, 'First compile OK');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
       Check(LResult = 30, 'First: host_add(10, 20) = %d (expected 30)', [LResult]);
     end;
-
     // Second compile: 100 + 200 = 300
-    LScript.LoadFromString(
+    gny_load_from_string(LEngine,
+      PAnsiChar(UTF8Encode(
       '''
       module mem test_recomp2;
       public routine main(): int64;
@@ -235,22 +253,27 @@ begin
         return host_add(100, 200);
       end;
       end.
-      ''', 'recomp2.pxs');
+      ''')),
+      PAnsiChar(UTF8Encode('recomp2.pxs')));
 
-    if not LScript.Compile() then
+    if not gny_compile(LEngine) then
     begin
-      FlushErrors(LScript.GetErrors());
+      gny_print_errors(LEngine);
       Check(False, 'Recompile failed');
     end
     else
     begin
       Check(True, 'Recompile OK');
-      LResult := LScript.Invoke('main', [], gvtInt64).AsInt64;
-      Check(LResult = 300, 'Recompile: host_add(100, 200) = %d (expected 300)', [LResult]);
+      LResult := gny_invoke(LEngine,
+        PAnsiChar(UTF8Encode('main')), GNY_VT_INT64).AsInt64;
+      Check(LResult = 300, 'Recompile: host_add(100, 200) = %d (expected 300)',
+        [LResult]);
     end;
   finally
-    LScript.Free();
+    gny_destroy(LEngine);
   end;
+
+  gny_unload();
 end;
 
 end.
