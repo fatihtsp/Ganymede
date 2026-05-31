@@ -8,6 +8,8 @@
 
 </div>
 
+> **Note:** This project is not affiliated with or connected to the RAD Studio Ganymede beta by Embarcadero.
+
 ## 🚀 What is Ganymede?
 
 **Ganymede** is an embeddable native scripting engine. You give it source code, it compiles to **real x64 machine code** via JIT — no interpreter, no bytecode VM, no garbage collector pauses. Compiled functions are bare native pointers you can call with zero overhead, exactly like calling a C function. The engine ships as a single `Ganymede.dll` with a flat C-style API that works from any language that can load a DLL.
